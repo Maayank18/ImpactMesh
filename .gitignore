@@ -1,0 +1,14 @@
+node_modules
+dist
+.turbo
+.env
+.env.local
+.env.*.local
+apps/api/data/store.json
+apps/api/data/uploads
+coverage
+playwright-report
+*.log
+.DS_Store
+Thumbs.db
+*.tsbuildinfo

@@ -1,0 +1,20 @@
+{
+  "name": "impactmesh",
+  "private": true,
+  "version": "0.1.0",
+  "description": "From field media to verifiable impact evidence.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "pnpm --filter @impactmesh/web dev",
+    "dev:api": "pnpm --filter @impactmesh/api dev",
+    "test": "pnpm -r --filter \"./packages/**\" test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "packageManager": "pnpm@10.15.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "msgpackr-extract"]
+  }
+}
