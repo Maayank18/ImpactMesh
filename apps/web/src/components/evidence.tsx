@@ -91,11 +91,49 @@ export function EvidenceDrawer({
       {media.decision ? (
         <div className="mt-4">
           <Eyebrow>Why this route</Eyebrow>
+          <div className="mt-2 flex items-center gap-2">
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                media.decision.source === 'jev'
+                  ? 'bg-sky/20 text-sky'
+                  : 'bg-faint/30 text-dim'
+              }`}
+            >
+              {media.decision.source === 'jev' ? '⚡ Routed by Jev' : '📋 Local policy'}
+            </span>
+            <span className="font-mono text-xs text-dim">
+              {(media.decision.confidence * 100).toFixed(0)}% confidence
+            </span>
+          </div>
           <ul className="mt-2 list-disc space-y-1 pl-4 text-sm text-dim">
             {media.decision.reasons.map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
           </ul>
+          {media.decision.debug ? (
+            <div className="mt-3 rounded-xl border border-line/50 bg-base/50 p-3 text-xs">
+              <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-faint mb-2">Decision trace</p>
+              <div className="space-y-1 text-dim">
+                {media.decision.debug.respondingModel ? (
+                  <p>Model: <span className="text-body">{media.decision.debug.respondingModel}</span></p>
+                ) : null}
+                {media.decision.debug.latencyMs != null ? (
+                  <p>Latency: <span className="text-body">{media.decision.debug.latencyMs}ms</span></p>
+                ) : null}
+                {media.decision.debug.reviewProbability != null ? (
+                  <p>Review probability: <span className="text-body">{(media.decision.debug.reviewProbability * 100).toFixed(0)}%</span></p>
+                ) : null}
+                {media.decision.debug.agreedWithPolicy === false ? (
+                  <p className="text-amber">⚠ Jev and the local policy disagreed — a person confirmed this filing.</p>
+                ) : media.decision.debug.agreedWithPolicy === true ? (
+                  <p className="text-mint">✓ Jev and local policy agreed.</p>
+                ) : null}
+                {media.decision.debug.promptTokens != null || media.decision.debug.completionTokens != null ? (
+                  <p>Tokens: <span className="text-body">{media.decision.debug.promptTokens ?? '?'}→{media.decision.debug.completionTokens ?? '?'}</span></p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="mt-5">

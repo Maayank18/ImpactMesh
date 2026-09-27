@@ -5,6 +5,7 @@ import type { GraphLink, GraphNode, GraphPayload } from '@impactmesh/shared-type
 import { useTheme } from '@/stores/theme'
 import type { LayerVisibility } from './canvas-layers'
 
+
 export interface GraphHandle {
   zoomToFit: () => void
   flyTo: (id: string) => void

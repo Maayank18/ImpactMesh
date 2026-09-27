@@ -51,12 +51,15 @@ export const env = {
   cloudKey,
   cloudSecret,
   typesafeKey: process.env.TYPESAFE_API_KEY || '',
+  openRouterKey: process.env.OPENROUTER_API_KEY || process.env.TYPESAFE_API_KEY || '',
+  jevModel: process.env.JEV_MODEL || 'typesafe/jev-router',
+  groqKey: process.env.GROQ_API_KEY || '',
   redisUrl: process.env.REDIS_URL || '',
 }
 
 export const services = {
   cloudinary: flag(env.cloudName) && flag(env.cloudKey) && flag(env.cloudSecret),
-  jev: flag(env.typesafeKey),
+  jev: flag(env.openRouterKey),
   redis: flag(env.redisUrl),
   mongodb: true,
 }

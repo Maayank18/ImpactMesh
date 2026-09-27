@@ -1,94 +1,191 @@
-import type { EvidenceDecision } from '@impactmesh/shared-types'
+import type { EvidenceDecision, EvidenceRole, RelationType } from '@impactmesh/shared-types'
 import { ACTIVITIES } from './taxonomy'
 import { policyRoute, type PolicyInput } from './policy'
 
-type ChoiceAnswer = { choice?: string; confidence?: number; probabilities?: Record<string, number> }
-type NoulAnswer = { noul?: number }
-
-function confidenceOf(answer: ChoiceAnswer | undefined, fallback: number) {
-  if (!answer?.choice) return fallback
-  if (typeof answer.confidence === 'number') return answer.confidence
-  const probability = answer.probabilities?.[answer.choice]
-  return typeof probability === 'number' ? probability : fallback
+// Zod-like runtime validation (no extra dependency — uses plain checks)
+interface JevResponse {
+  project: string
+  activity: string
+  evidenceRole: string
+  relation: string
+  confidence: number
+  reviewProbability: number
+  reasoning: string[]
 }
 
-export async function routeEvidence(input: PolicyInput, apiKey?: string): Promise<EvidenceDecision> {
+const VALID_ROLES = new Set([
+  'cover', 'before', 'after', 'activity_evidence',
+  'location_evidence', 'partner_evidence', 'supporting', 'exclude', 'review',
+])
+
+const VALID_RELATIONS = new Set([
+  'BELONGS_TO', 'SHOWS_ACTIVITY', 'CAPTURED_AT',
+  'BEFORE_OF', 'AFTER_OF', 'SUPPORTS',
+])
+
+function parseJevResponse(raw: unknown): JevResponse | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Record<string, unknown>
+  if (typeof obj.project !== 'string') return null
+  if (typeof obj.activity !== 'string') return null
+  if (typeof obj.confidence !== 'number' || obj.confidence < 0 || obj.confidence > 1) return null
+  if (typeof obj.reviewProbability !== 'number') return null
+  const evidenceRole = typeof obj.evidenceRole === 'string' && VALID_ROLES.has(obj.evidenceRole)
+    ? obj.evidenceRole
+    : 'activity_evidence'
+  const relation = typeof obj.relation === 'string' && VALID_RELATIONS.has(obj.relation)
+    ? obj.relation
+    : 'BELONGS_TO'
+  const reasoning = Array.isArray(obj.reasoning)
+    ? obj.reasoning.filter((r): r is string => typeof r === 'string').slice(0, 5)
+    : []
+  return {
+    project: obj.project,
+    activity: obj.activity,
+    evidenceRole,
+    relation,
+    confidence: Math.max(0, Math.min(1, obj.confidence)),
+    reviewProbability: Math.max(0, Math.min(1, obj.reviewProbability)),
+    reasoning,
+  }
+}
+
+export async function routeEvidence(
+  input: PolicyInput,
+  apiKey?: string,
+  model?: string,
+): Promise<EvidenceDecision> {
   const policy = policyRoute(input)
   if (!apiKey) return policy
 
+  const modelSlug = model || 'typesafe/jev-router'
+  const start = Date.now()
+
   try {
-    const sdk = (await import('@typesafe-ai/sdk')) as {
-      TypeSafeClient: new (options?: { apiKey?: string; defaultModel?: string }) => {
-        systemOne: (body: { state: unknown; questions: Record<string, unknown> }) => Promise<{
-          model?: string
-          answers: Record<string, ChoiceAnswer | NoulAnswer>
-        }>
-      }
-      choice: (instructions: string, criteria: Record<string, string | null>) => unknown
-      noul: (instructions: string) => unknown
-    }
+    // Build the project choices for the schema enum
+    const projectIds = input.projects.map((p) => p.id)
+    const projectEnum = [...projectIds, 'needs_review', 'unrelated']
+    const activityIds = ACTIVITIES.map((a) => a.id)
+    const activityEnum = [...activityIds, 'unknown']
 
-    const projectCriteria: Record<string, string | null> = {
-      needs_review: 'A person should confirm where this asset belongs.',
-      unrelated: 'The asset does not belong to any current project.',
-    }
-    for (const project of input.projects) {
-      projectCriteria[project.id] = `${project.name}. ${project.description}`
-    }
+    const systemMessage = [
+      'You are an evidence routing classifier for a sustainability impact platform.',
+      'You receive metadata about a field-captured image and must decide:',
+      '1. Which project this image belongs to (pick ONLY from the given project IDs)',
+      '2. Which sustainability activity it shows',
+      '3. Its evidence role and graph relation',
+      '4. Your confidence (0-1) and whether a human should review it (0-1)',
+      '',
+      'RULES:',
+      '- Only choose from the IDs given. Never invent a project or activity ID.',
+      '- If nothing fits well, use "needs_review" or "unrelated" for project, "unknown" for activity.',
+      '- This is a field-evidence intake decision, not free chat.',
+      '- Keep reasoning strings short (under 140 chars each) and limited to 1-3 items.',
+      '',
+      'Respond with valid JSON matching the exact schema provided.',
+    ].join('\n')
 
-    const activityCriteria: Record<string, string | null> = { unknown: 'None of the activities fit.' }
-    for (const activity of ACTIVITIES) activityCriteria[activity.id] = activity.description
-
-    const client = new sdk.TypeSafeClient({ apiKey, defaultModel: 'jev-1.13.0' })
-    const response = await client.systemOne({
-      state: {
-        filename: input.filename,
-        caption: input.caption,
-        tags: input.tags,
-        locationKnown: input.locationKnown,
-        duplicateRisk: input.duplicateRisk,
-        projects: input.projects.map((project) => ({
-          id: project.id,
-          name: project.name,
-          description: project.description,
-        })),
-      },
-      questions: {
-        project: sdk.choice('Which project should this field asset join?', projectCriteria),
-        activity: sdk.choice('Which sustainability activity does this asset show?', activityCriteria),
-        review: sdk.noul('Should a human review this asset before it is trusted in the evidence graph?'),
-        role: sdk.choice('Which evidence role fits this asset?', {
-          cover: 'Strong representative frame for the project.',
-          before: 'Earlier state in a visual comparison.',
-          after: 'Later state in a visual comparison.',
-          activity_evidence: 'Shows the project activity.',
-          location_evidence: 'Mainly establishes where the work happened.',
-          partner_evidence: 'Shows a partner, institution, or joint crew.',
-          supporting: 'Useful context, not a primary claim.',
-          exclude: 'Do not use this in a report.',
-          review: 'Hold it for a person.',
-        }),
-        relation: sdk.choice('Which graph relation should connect this asset to the project?', {
-          BELONGS_TO: 'It is simply part of the project record.',
-          SHOWS_ACTIVITY: 'It shows a project activity.',
-          CAPTURED_AT: 'Its main value is the place it was captured.',
-          BEFORE_OF: 'It is the earlier frame of a comparison.',
-          AFTER_OF: 'It is the later frame of a comparison.',
-          SUPPORTS: 'It supports a claim but is not the activity itself.',
-        }),
-      },
+    const userMessage = JSON.stringify({
+      filename: input.filename,
+      caption: input.caption,
+      tags: input.tags,
+      locationKnown: input.locationKnown,
+      duplicateRisk: input.duplicateRisk,
+      projects: input.projects.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+      })),
     })
 
-    const answers = response.answers
-    const projectAnswer = answers.project as ChoiceAnswer
-    const activityAnswer = answers.activity as ChoiceAnswer
-    const roleAnswer = answers.role as ChoiceAnswer
-    const relationAnswer = answers.relation as ChoiceAnswer
-    const reviewAnswer = answers.review as NoulAnswer
-    const projectChoice = projectAnswer?.choice || policy.projectChoice
-    const confidence = Number(confidenceOf(projectAnswer, policy.confidence).toFixed(2))
-    const reviewProbability = typeof reviewAnswer?.noul === 'number' ? reviewAnswer.noul : 0
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10_000)
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://impact-mesh.vercel.app',
+        'X-Title': 'ImpactMesh Evidence Router',
+      },
+      body: JSON.stringify({
+        model: modelSlug,
+        temperature: 0,
+        max_tokens: 500,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'evidence_decision',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                project: { type: 'string', enum: projectEnum },
+                activity: { type: 'string', enum: activityEnum },
+                evidenceRole: {
+                  type: 'string',
+                  enum: ['cover', 'before', 'after', 'activity_evidence',
+                    'location_evidence', 'partner_evidence', 'supporting', 'exclude', 'review'],
+                },
+                relation: {
+                  type: 'string',
+                  enum: ['BELONGS_TO', 'SHOWS_ACTIVITY', 'CAPTURED_AT',
+                    'BEFORE_OF', 'AFTER_OF', 'SUPPORTS'],
+                },
+                confidence: { type: 'number' },
+                reviewProbability: { type: 'number' },
+                reasoning: { type: 'array', items: { type: 'string' }, maxItems: 3 },
+              },
+              required: ['project', 'activity', 'evidenceRole', 'relation',
+                'confidence', 'reviewProbability', 'reasoning'],
+              additionalProperties: false,
+            },
+          },
+        },
+        messages: [
+          { role: 'system', content: systemMessage },
+          { role: 'user', content: userMessage },
+        ],
+      }),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeout)
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '')
+      throw new Error(`OpenRouter returned ${response.status}: ${errorText.slice(0, 200)}`)
+    }
+
+    const body = await response.json() as {
+      model?: string
+      choices?: Array<{ message?: { content?: string } }>
+      usage?: { prompt_tokens?: number; completion_tokens?: number }
+    }
+    const latencyMs = Date.now() - start
+    const rawContent = body.choices?.[0]?.message?.content
+    if (!rawContent) throw new Error('No content in OpenRouter response')
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(rawContent)
+    } catch {
+      throw new Error('Malformed JSON in model response')
+    }
+
+    const jev = parseJevResponse(parsed)
+    if (!jev) throw new Error('Model response failed schema validation')
+
+    // Validate project choice is in our allowed set
+    const projectChoice = projectEnum.includes(jev.project) ? jev.project : policy.projectChoice
+    const confidence = Number(jev.confidence.toFixed(2))
+    const reviewProbability = jev.reviewProbability
+
+    // Compute disagreement with policy
     const disagrees = projectChoice !== policy.projectChoice
+
+    // App-level requiresReview (the app decides, not the model)
     const requiresReview =
       reviewProbability >= 0.55 ||
       confidence < 0.75 ||
@@ -97,25 +194,40 @@ export async function routeEvidence(input: PolicyInput, apiKey?: string): Promis
       projectChoice === 'unrelated' ||
       disagrees
 
+    // Build reasons array
     const reasons = [
-      `Jev selected “${projectChoice}” with confidence ${confidence.toFixed(2)}.`,
+      ...jev.reasoning,
+      `Jev selected "${projectChoice}" with confidence ${confidence.toFixed(2)}.`,
       `Review probability is ${reviewProbability.toFixed(2)}. The application, not the model, applies the review rule.`,
     ]
     if (disagrees) {
       reasons.push('Jev and the local policy chose different projects, so a person should confirm.')
     }
-    if (input.duplicateRisk >= 0.92) reasons.push('Perceptual hash is close to an existing asset.')
+    if (input.duplicateRisk >= 0.92) {
+      reasons.push('Perceptual hash is close to an existing asset.')
+    }
+
+    const respondingModel = body.model || modelSlug
 
     return {
       source: 'jev',
-      model: response.model || 'jev-1.13.0',
+      model: respondingModel,
       projectChoice,
       confidence,
       requiresReview,
-      evidenceRole: (roleAnswer?.choice as EvidenceDecision['evidenceRole']) || policy.evidenceRole,
-      relation: (relationAnswer?.choice as EvidenceDecision['relation']) || policy.relation,
-      activityCategory: activityAnswer?.choice && activityAnswer.choice !== 'unknown' ? activityAnswer.choice : policy.activityCategory,
+      evidenceRole: (jev.evidenceRole as EvidenceDecision['evidenceRole']) || policy.evidenceRole,
+      relation: (jev.relation as EvidenceDecision['relation']) || policy.relation,
+      activityCategory: jev.activity !== 'unknown' ? jev.activity : policy.activityCategory,
       reasons,
+      debug: {
+        respondingModel,
+        latencyMs,
+        promptTokens: body.usage?.prompt_tokens,
+        completionTokens: body.usage?.completion_tokens,
+        reviewProbability,
+        policyProjectChoice: policy.projectChoice,
+        agreedWithPolicy: !disagrees,
+      },
     }
   } catch (error) {
     return {

@@ -98,7 +98,8 @@ export async function analyzeMedia(mediaId: string) {
         duplicateRisk: similar?.score ?? 0,
         projects: repo.projectsForDecisions(),
       },
-      env.typesafeKey || undefined,
+      env.openRouterKey || undefined,
+      env.jevModel,
     )
     if (geo.reason) decision.reasons = [...decision.reasons, geo.reason]
     await wait(450)

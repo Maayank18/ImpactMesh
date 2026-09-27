@@ -157,6 +157,15 @@ export interface EvidenceDecision {
   relation: RelationType
   activityCategory: string | null
   reasons: string[]
+  debug?: {
+    respondingModel?: string
+    latencyMs?: number
+    promptTokens?: number
+    completionTokens?: number
+    reviewProbability?: number
+    policyProjectChoice?: string
+    agreedWithPolicy?: boolean
+  }
 }
 
 export interface SimilarMatch {

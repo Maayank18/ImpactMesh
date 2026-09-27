@@ -36,10 +36,10 @@ The 3D graph is rendered in the browser with Three.js. It reads evidence from th
 Copy `.env.example` to `.env` when you want the optional live services:
 
 - **Cloudinary** — signed uploads, CDN transforms, AI Vision tagging and captions.
-- **Jev** (`TYPESAFE_API_KEY`) — bounded decisions for project, activity, review, evidence role, and graph relation. The application still applies the review rule. If Jev and the local policy disagree, the asset waits for a person.
+- **Jev** (`OPENROUTER_API_KEY`) — bounded decisions for project, activity, review, evidence role, and graph relation via OpenRouter. The application still applies the review rule. If Jev and the local policy disagree, the asset waits for a person. Model is configurable via `JEV_MODEL` (default: `typesafe/jev-router`).
 - **Redis** — BullMQ. The worker in `apps/worker` calls back into the API. Without Redis, analysis stays in-process.
 
-Never put the Cloudinary secret or the TypeSafe key in the browser.
+Never put the Cloudinary secret or the OpenRouter key in the browser.
 
 ## A path through the product
 
