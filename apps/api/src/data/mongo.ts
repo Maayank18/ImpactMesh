@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { MongoClient, type Db } from 'mongodb'
@@ -31,6 +32,7 @@ export async function connectDatabase(): Promise<{ db: Db; label: MongoLabel }> 
     console.log('Local MongoDB is not running. Starting an embedded MongoDB so the app can boot without an account or API key.')
     const { MongoMemoryServer } = await import('mongodb-memory-server')
     const dbPath = path.join(os.tmpdir(), 'impactmesh-mongodb')
+    await fs.mkdir(dbPath, { recursive: true })
     const memory = await MongoMemoryServer.create({
       instance: {
         dbName: process.env.MONGODB_DB || 'impactmesh',
