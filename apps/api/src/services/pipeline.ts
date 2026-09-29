@@ -103,6 +103,26 @@ export async function analyzeMedia(mediaId: string) {
       env.groqKeys,
     )
     if (geo.reason) decision.reasons = [...decision.reasons, geo.reason]
+    if (vision.category && vision.category !== 'general_evidence') {
+      decision.contentCategory = vision.category
+      const categoryLabels: Record<string, string> = {
+        travel_landscape: 'Travel & Exploration',
+        events_gatherings: 'Events & Gatherings',
+        personal_meeting: 'Personal & Meetings',
+        work_documentation: 'Work & Documentation',
+        field_operations: 'Field Operations',
+        community_social: 'Community & Social Impact',
+        general_evidence: 'General Evidence',
+      }
+      decision.categoryLabel = categoryLabels[vision.category] || 'General Evidence'
+      if (vision.category !== 'field_operations') {
+        decision.projectChoice = 'unrelated'
+        decision.relation = 'FILED_IN'
+      }
+    }
+    if (vision.caption && !decision.reasons.some((r) => r.startsWith('AI Vision:'))) {
+      decision.reasons = [`AI Vision: ${vision.caption}`, ...decision.reasons]
+    }
     await wait(450)
     repo.applyAnalysis(mediaId, {
       caption,

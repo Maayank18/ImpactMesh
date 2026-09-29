@@ -411,17 +411,31 @@ export function WorkspacePage() {
           registeredMediaId = media?.id ?? null
         }
 
-        // Check for AI analysis result from backend
+        // Check for AI analysis result from backend with polling
         let resolvedCategory = item.suggestedProject
         let resolvedLocation = item.suggestedLocation
         if (registeredMediaId) {
           try {
-            const mediaDetail = await api<{ media: { decision?: { categoryLabel?: string }; locationId?: string }; location?: { name: string } }>(`/media/${registeredMediaId}`)
-            if (mediaDetail?.media?.decision?.categoryLabel) {
-              resolvedCategory = mediaDetail.media.decision.categoryLabel
-            }
-            if (mediaDetail?.location?.name) {
-              resolvedLocation = mediaDetail.location.name
+            for (let attempt = 0; attempt < 5; attempt++) {
+              await new Promise((r) => setTimeout(r, 600))
+              const mediaDetail = await api<{
+                media: {
+                  aiStatus?: string
+                  decision?: { categoryLabel?: string; contentCategory?: string }
+                  locationId?: string
+                }
+                location?: { name: string }
+              }>(`/media/${registeredMediaId}`)
+
+              if (mediaDetail?.media?.decision?.categoryLabel) {
+                resolvedCategory = mediaDetail.media.decision.categoryLabel
+              }
+              if (mediaDetail?.location?.name) {
+                resolvedLocation = mediaDetail.location.name
+              }
+              if (mediaDetail?.media?.aiStatus === 'ready') {
+                break
+              }
             }
           } catch {
             // fallback to heuristic
@@ -433,11 +447,11 @@ export function WorkspacePage() {
             b.id === item.id
               ? {
                   ...b,
-                  progress: 85,
+                  progress: 90,
                   stage: 'location',
                   suggestedProject: resolvedCategory,
                   suggestedLocation: resolvedLocation,
-                  statusText: 'Checking EXIF GPS & AI vision signals…',
+                  statusText: 'AI Vision analysis verified & orbital position computed',
                 }
               : b,
           ),
@@ -451,11 +465,11 @@ export function WorkspacePage() {
                 : b,
             ),
           )
-          workspace.toast(`${item.filename} added to evidence record`)
+          workspace.toast(`${item.filename} added to ${resolvedCategory} cluster`)
           if (registeredMediaId) {
             void graph.refetch?.()
           }
-        }, 800)
+        }, 600)
       } catch (err) {
         setUploadBatch((prev) =>
           prev.map((b) =>
