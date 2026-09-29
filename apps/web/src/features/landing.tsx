@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
@@ -22,11 +22,54 @@ import { ThemeToggle } from '@/components/theme-toggle'
 const DOCK_ITEMS = [
   { id: 'media', emoji: '📸', label: 'Field Assets', sub: 'EXIF & Raw Photos', to: '/feed' },
   { id: 'geo', emoji: '📍', label: 'Spatial GPS', sub: 'Centroid Coordinates', to: '/app?overlay=map' },
-  { id: 'eco', emoji: '🌱', label: 'Restoration Species', sub: '1,200 Saplings', to: '/app' },
+  { id: 'eco', emoji: '🌐', label: 'Domain Clusters', sub: 'Multi-Category Mesh', to: '/app' },
   { id: 'ai', emoji: '⚡', label: 'AI Truth Engine', sub: 'Cloudinary Vision', to: '/app' },
   { id: 'proof', emoji: '🏆', label: 'Evidence Mesh', sub: '0 Collisions Hash', to: '/feed' },
-  { id: 'lens', emoji: '🌓', label: 'Before / After', sub: '13-Mo Comparison', to: '/app?overlay=compare' },
+  { id: 'lens', emoji: '🌓', label: 'Before / After', sub: 'Forensic Comparison', to: '/app?overlay=compare' },
 ]
+
+// Animated Teleprompter domain rotation phrases
+const PROMPTER_PHRASES = [
+  'ecological restoration & carbon canopy audits',
+  'field operations & remote site inspections',
+  'corporate ESG & supply chain compliance',
+  'disaster response & ground truth verification',
+  'civic infrastructure & asset integrity audits',
+  'community programs & verifiable public impact',
+]
+
+// Smooth typewriter hook with typing, pause, backspacing, and cycle
+function useTypewriter(phrases: string[], typingSpeed = 50, deletingSpeed = 25, pauseMs = 1800) {
+  const [phraseIdx, setPhraseIdx] = useState(0)
+  const [displayText, setDisplayText] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  useEffect(() => {
+    const currentPhrase = phrases[phraseIdx % phrases.length]
+    let timer: ReturnType<typeof setTimeout>
+
+    if (!isDeleting && displayText.length < currentPhrase.length) {
+      timer = setTimeout(() => {
+        setDisplayText(currentPhrase.slice(0, displayText.length + 1))
+      }, typingSpeed)
+    } else if (!isDeleting && displayText.length === currentPhrase.length) {
+      timer = setTimeout(() => {
+        setIsDeleting(true)
+      }, pauseMs)
+    } else if (isDeleting && displayText.length > 0) {
+      timer = setTimeout(() => {
+        setDisplayText(currentPhrase.slice(0, displayText.length - 1))
+      }, deletingSpeed)
+    } else if (isDeleting && displayText.length === 0) {
+      setIsDeleting(false)
+      setPhraseIdx((prev) => (prev + 1) % phrases.length)
+    }
+
+    return () => clearTimeout(timer)
+  }, [displayText, isDeleting, phraseIdx, phrases, typingSpeed, deletingSpeed, pauseMs])
+
+  return displayText
+}
 
 // Interactive nodes in the Hero Evidence Universe
 interface HeroNode {
@@ -44,85 +87,85 @@ interface HeroNode {
 const HERO_NODES: HeroNode[] = [
   {
     id: 'node-project',
-    label: 'YAMUNA RESTORATION',
+    label: 'VERIFIED PROJECT MESH',
     category: 'project',
     x: 50,
     y: 50,
     color: '#5ee0b5',
-    meta: 'Active Project · 486 Assets',
-    detail: 'Gravity center connecting ecological field captures, monsoon flood data, and community cleanups.',
+    meta: 'Active Evidence Core · Multi-Asset',
+    detail: 'Central semantic nucleus connecting field captures, spatial coordinates, and forensic audits.',
   },
   {
     id: 'node-media-after',
-    label: 'IMG_2026_0918_AFTER.JPG',
+    label: 'FIELD_FRAME_2026.JPG',
     category: 'media',
     x: 78,
     y: 28,
     color: '#5ee0b5',
     image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=600&q=80',
-    meta: 'Monsoon Sapling Bed · 95% Verified',
-    detail: 'EXIF GPS 28.6694° N, 77.2318° E. Cloudinary Vision detected native saplings with 0.94 confidence.',
+    meta: 'Target State · 98% Verified',
+    detail: 'Hardware EXIF GPS anchored. Cloudinary AI Vision detected verified activity with zero hash collisions.',
   },
   {
     id: 'node-media-before',
-    label: 'IMG_2025_0814_BEFORE.JPG',
+    label: 'BASELINE_FRAME_2025.JPG',
     category: 'media',
     x: 18,
     y: 72,
     color: '#5ee0b5',
     image: 'https://images.unsplash.com/photo-1504893524553-b855bce32c67?auto=format&fit=crop&w=600&q=80',
-    meta: 'Baseline Bank · Pre-Restoration',
-    detail: 'Eroded silt bank prior to plantation. Verified as primary comparator frame.',
+    meta: 'Historical Benchmark · Verified Baseline',
+    detail: 'Original baseline capture prior to intervention. Verified as primary comparator frame.',
   },
   {
     id: 'node-location',
-    label: 'NIGAMBODH GHAT',
+    label: 'SPATIAL GPS CENTROID',
     category: 'location',
     x: 82,
     y: 75,
     color: '#e4b15a',
-    meta: '28.6694° N, 77.2318° E · Delhi',
-    detail: 'Spatial centroid anchored to Yamuna flood basin. Clusters 42 verified field captures.',
+    meta: 'Hardware Coordinates · Geofenced',
+    detail: 'Spatial centroid anchored to verified field coordinates. Clusters authenticated captures.',
   },
   {
     id: 'node-activity',
-    label: 'TREE PLANTING',
+    label: 'FIELD ACTIVITY',
     category: 'activity',
     x: 22,
     y: 26,
     color: '#8eb7ff',
-    meta: 'Native Species · 1,200 Saplings',
-    detail: 'Monsoon afforestation campaign mapped against watershed biodiversity criteria.',
+    meta: 'Taxonomy Verified · Action Record',
+    detail: 'Ground truth operational milestone mapped against verified project deliverables.',
   },
   {
     id: 'node-compare',
-    label: 'BEFORE / AFTER SET',
+    label: 'FORENSIC COMPARISON',
     category: 'compare',
     x: 48,
     y: 86,
     color: '#8eb7ff',
-    meta: '13-Month Pair · Synchronized',
-    detail: 'Dual-lens comparison highlighting canopy expansion without uncalibrated metric claims.',
+    meta: 'Dual-Lens Synchronized Diff',
+    detail: 'Side-by-side split slider and blink comparator highlighting temporal change without false claims.',
   },
   {
     id: 'node-report',
-    label: 'SEPTEMBER 2026 BRIEF',
+    label: 'TRACEABLE AUDIT BRIEF',
     category: 'report',
     x: 52,
     y: 14,
     color: '#f0d7b0',
-    meta: 'Traceable Report · 18 Citations',
+    meta: 'Traceable Report · Citations Linked',
     detail: 'Stakeholder brief where every finding embeds cryptographic hash references back to source assets.',
   },
   {
     id: 'node-evidence',
-    label: 'EVIDENCE MESH #73',
+    label: 'EVIDENCE MESH',
     category: 'evidence',
     x: 88,
     y: 52,
     color: '#7ddec8',
     meta: 'Cryptographic Hash Validated',
-    detail: 'Perceptual dHash verified with zero collision across 486 ingested frames.',
+    detail: 'Perceptual 64-bit dHash verified with zero collision across ingested media records.',
   },
 ]
 
@@ -142,7 +185,7 @@ const PIPELINE_STEPS = [
     sub: 'Semantic gravity center',
     color: '#5ee0b5',
     icon: Layers,
-    example: 'Yamuna River Restoration',
+    example: 'Autonomous Project Binding',
   },
   {
     id: 'location',
@@ -150,7 +193,7 @@ const PIPELINE_STEPS = [
     sub: 'GPS coordinates & bounds',
     color: '#e4b15a',
     icon: MapPin,
-    example: '28.6694° N, 77.2318° E',
+    example: 'Hardware EXIF Coordinates',
   },
   {
     id: 'activity',
@@ -158,7 +201,7 @@ const PIPELINE_STEPS = [
     sub: 'Action taxonomy classification',
     color: '#8eb7ff',
     icon: Zap,
-    example: 'Native riparian planting',
+    example: 'Taxonomy & Action Mapping',
   },
   {
     id: 'compare',
@@ -166,7 +209,7 @@ const PIPELINE_STEPS = [
     sub: 'Spatial temporal comparison',
     color: '#8eb7ff',
     icon: SlidersHorizontal,
-    example: '13-month canopy diff',
+    example: 'Multi-Temporal Change Diff',
   },
   {
     id: 'report',
@@ -181,6 +224,7 @@ const PIPELINE_STEPS = [
 export function LandingPage() {
   const [selectedNode, setSelectedNode] = useState<HeroNode>(HERO_NODES[0])
   const [activeStep, setActiveStep] = useState(0)
+  const typewriterText = useTypewriter(PROMPTER_PHRASES)
 
   return (
     <div className="relative min-h-screen bg-bg text-ink selection:bg-mint-2 selection:text-ink font-sans grid-bg">
@@ -236,15 +280,15 @@ export function LandingPage() {
           <div className="pointer-events-none absolute -top-40 left-1/2 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-mint/5 blur-[120px]" />
 
           <div className="mx-auto max-w-7xl px-6 sm:px-8">
-            {/* Top Announcement Banner Pill (like Nexprint creator banner) */}
+            {/* Top Announcement Banner Pill */}
             <div className="flex justify-center mb-6">
-              <div className="inline-flex items-center gap-2.5 rounded-full border border-amber/40 bg-amber/10 px-4 py-1.5 text-xs text-ink backdrop-blur-md shadow-sm transition hover:scale-[1.01]">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber/20 text-xs">🌱</span>
+              <div className="inline-flex items-center gap-2.5 rounded-full border border-mint/30 bg-mint/5 px-4 py-1.5 text-xs text-ink backdrop-blur-md shadow-sm transition hover:scale-[1.01]">
+                <span className="flex h-2 w-2 rounded-full bg-mint animate-ping" />
                 <span className="font-mono text-[11px] tracking-wide text-dim">
-                  Yamuna Restoration: <strong className="text-ink font-semibold">1,200 Native Saplings</strong> verified across 486 field captures
+                  Autonomous AI Evidence Pipeline · <strong className="text-ink font-semibold">Real-Time Perceptual Hashing & Spatial Mesh</strong>
                 </span>
-                <span className="hidden sm:inline-block rounded-full bg-amber/25 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-amber">
-                  Live Record
+                <span className="hidden sm:inline-block rounded-full bg-mint/20 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-mint">
+                  Live Engine
                 </span>
               </div>
             </div>
@@ -254,32 +298,58 @@ export function LandingPage() {
               <div className="inline-flex items-center gap-2 rounded-full border border-line bg-elev/80 px-3.5 py-1 text-xs backdrop-blur-md shadow-sm">
                 <span className="h-1.5 w-1.5 rounded-full bg-mint animate-pulse" />
                 <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-dim">
-                  Spatial Evidence Graph
+                  Cryptographic Spatial Evidence Mesh
                 </span>
               </div>
 
               <h1 className="font-serif text-5xl sm:text-6xl md:text-7xl font-normal tracking-tight text-ink leading-[1.06]">
-                From field media
+                From raw field media
                 <br />
-                <span className="italic text-mint">to verifiable impact.</span>
+                <span className="italic text-mint">to verifiable truth.</span>
               </h1>
 
-              {/* Big bold stat counter lockup (Creative & high impact like reference) */}
-              <div className="pt-1 flex flex-col items-center">
-                <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-faint">
-                  Verified Ecological Canopy Growth
-                </div>
-                <div className="mt-1 font-mono text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight text-ink drop-shadow-sm">
-                  1,200 <span className="text-mint text-4xl sm:text-5xl font-serif font-normal italic">Saplings</span>
-                </div>
-                <div className="mt-1 font-mono text-[11px] text-dim">
-                  486 Field Frames · 0 Perceptual Hash Collisions · 100% EXIF Audited
+              {/* Dynamic Animated Teleprompter Lockup (Universal domain cycling) */}
+              <div className="mx-auto max-w-2xl pt-2">
+                <div className="group relative overflow-hidden rounded-2xl border border-line/80 bg-elev/90 p-4 sm:p-5 shadow-2xl backdrop-blur-xl transition hover:border-mint/50">
+                  <div className="flex items-center justify-between border-b border-line/60 pb-2.5 mb-3 font-mono text-[11px]">
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 mr-1">
+                        <span className="h-2.5 w-2.5 rounded-full bg-red-500/80 inline-block" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80 inline-block" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-mint/80 inline-block" />
+                      </div>
+                      <span className="font-semibold text-ink uppercase tracking-wider text-[10px]">
+                        mesh-prompter :: verify_evidence
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-mint font-semibold bg-mint/10 border border-mint/25 px-2.5 py-0.5 rounded-full">
+                      Multi-Domain Engine
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 font-mono text-sm sm:text-base md:text-lg">
+                    <span className="text-dim shrink-0 font-medium select-none">$ verify --domain</span>
+                    <div className="min-w-0 flex-1 overflow-hidden flex items-baseline">
+                      <span className="text-ink font-semibold tracking-tight">
+                        &quot;<span className="text-mint">{typewriterText}</span>&quot;
+                      </span>
+                      <span className="ml-1 inline-block w-2 h-4 sm:h-5 bg-mint animate-pulse translate-y-0.5" />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[10px] sm:text-[11px] font-mono text-faint border-t border-line/40 pt-2.5">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-mint" />
+                      Deterministic 64-bit dHash · Hardware EXIF GPS · Multi-Modal Vision
+                    </span>
+                    <span className="text-dim font-medium hidden sm:inline">0 Hash Collisions</span>
+                  </div>
                 </div>
               </div>
 
-              <p className="mx-auto max-w-2xl text-base text-dim leading-relaxed pt-1">
-                ImpactMesh turns scattered field photos and videos into a connected evidence record — searchable,
-                traceable, and ready to become a story.
+              {/* Professional, concise 1-2 line value proposition */}
+              <p className="mx-auto max-w-2xl text-base sm:text-lg text-dim leading-relaxed pt-1">
+                ImpactMesh turns unverified field captures into cryptographic, tamper-evident 3D knowledge graphs — with real-time perceptual deduplication, spatial GPS anchoring, and forensic before/after verification.
               </p>
 
               {/* CTAs */}
@@ -304,13 +374,13 @@ export function LandingPage() {
 
             {/* HERO VISUAL: Interactive Miniature Evidence Universe with Playful Floating Badges */}
             <div className="mt-14 relative">
-              {/* Playful Floating Creative Badges around Hero (matches reference style) */}
+              {/* Playful Floating Badges around Hero (Universal platform capabilities) */}
               {/* Badge 1: Top-Left ⭐ */}
               <div className="absolute -top-6 left-2 sm:left-8 z-30 hidden sm:flex items-center gap-2.5 rounded-2xl border border-line bg-elev/95 px-3.5 py-2 shadow-xl backdrop-blur-xl animate-float-slow transition hover:scale-105 select-none">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber/15 text-amber text-sm font-bold">⭐</span>
                 <div>
-                  <p className="font-mono text-xs font-bold text-ink leading-tight">95% Truth Score</p>
-                  <p className="font-mono text-[9px] text-faint">Cloudinary Vision AI</p>
+                  <p className="font-mono text-xs font-bold text-ink leading-tight">98% Truth Score</p>
+                  <p className="font-mono text-[9px] text-faint">Cloudinary AI Vision</p>
                 </div>
               </div>
 
@@ -318,17 +388,17 @@ export function LandingPage() {
               <div className="absolute -top-5 right-2 sm:right-10 z-30 hidden sm:flex items-center gap-2.5 rounded-2xl border border-line bg-elev/95 px-3.5 py-2 shadow-xl backdrop-blur-xl animate-float-medium transition hover:scale-105 select-none">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky/15 text-sky text-sm">⚡</span>
                 <div>
-                  <p className="font-mono text-xs font-bold text-ink leading-tight">Native Species Match</p>
-                  <p className="font-mono text-[9px] text-faint">Tamarix dioica detected</p>
+                  <p className="font-mono text-xs font-bold text-ink leading-tight">Multi-Modal AI</p>
+                  <p className="font-mono text-[9px] text-faint">Groq 70B Taxonomy</p>
                 </div>
               </div>
 
-              {/* Badge 3: Mid-Left 🌱 */}
+              {/* Badge 3: Mid-Left 🌐 */}
               <div className="absolute top-1/2 -left-6 -translate-y-1/2 z-30 hidden lg:flex items-center gap-2.5 rounded-2xl border border-line bg-elev/95 px-3.5 py-2 shadow-2xl backdrop-blur-xl animate-float-reverse transition hover:scale-105 select-none">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-mint/15 text-mint text-sm">🌱</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-mint/15 text-mint text-sm">🌐</span>
                 <div>
-                  <p className="font-mono text-xs font-bold text-ink leading-tight">1,200 Native Saplings</p>
-                  <p className="font-mono text-[9px] text-faint">Phase 1 Monsoons</p>
+                  <p className="font-mono text-xs font-bold text-ink leading-tight">Dynamic 3D Clustering</p>
+                  <p className="font-mono text-[9px] text-faint">Multi-Category Mesh</p>
                 </div>
               </div>
 
@@ -336,17 +406,17 @@ export function LandingPage() {
               <div className="absolute top-1/2 -right-6 -translate-y-1/2 z-30 hidden lg:flex items-center gap-2.5 rounded-2xl border border-line bg-elev/95 px-3.5 py-2 shadow-2xl backdrop-blur-xl animate-float-slow transition hover:scale-105 select-none">
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose/15 text-rose text-sm">📍</span>
                 <div>
-                  <p className="font-mono text-xs font-bold text-ink leading-tight">28.6694° N, 77.2318° E</p>
-                  <p className="font-mono text-[9px] text-faint">Nigambodh Ghat Basin</p>
+                  <p className="font-mono text-xs font-bold text-ink leading-tight">Hardware EXIF GPS</p>
+                  <p className="font-mono text-[9px] text-faint">Anti-Spoof Centroids</p>
                 </div>
               </div>
 
-              {/* Badge 5: Bottom-Left 🌊 */}
+              {/* Badge 5: Bottom-Left 🌓 */}
               <div className="absolute -bottom-6 left-8 z-30 hidden sm:flex items-center gap-2.5 rounded-2xl border border-line bg-elev/95 px-3.5 py-2 shadow-xl backdrop-blur-xl animate-float-medium transition hover:scale-105 select-none">
-                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky/15 text-sky text-sm">🌊</span>
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-sky/15 text-sky text-sm">🌓</span>
                 <div>
-                  <p className="font-mono text-xs font-bold text-ink leading-tight">Restored Flood Bank</p>
-                  <p className="font-mono text-[9px] text-faint">Silt stabilization active</p>
+                  <p className="font-mono text-xs font-bold text-ink leading-tight">Forensic Split-Diff</p>
+                  <p className="font-mono text-[9px] text-faint">6 Comparison Modes</p>
                 </div>
               </div>
 
@@ -355,7 +425,7 @@ export function LandingPage() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-mint/15 text-mint text-sm">🏆</span>
                 <div>
                   <p className="font-mono text-xs font-bold text-ink leading-tight">Zero Data Tampering</p>
-                  <p className="font-mono text-[9px] text-faint">Perceptual dHash verified</p>
+                  <p className="font-mono text-[9px] text-faint">Perceptual 64-bit dHash</p>
                 </div>
               </div>
 
@@ -686,7 +756,7 @@ export function LandingPage() {
             </h2>
 
             <p className="mx-auto max-w-xl text-base sm:text-lg text-dim">
-              Explore the Yamuna River Restoration and Haryana Solar records in a full-screen, interactive spatial canvas.
+              Explore multi-domain evidence records and live project meshes in a full-screen, interactive spatial canvas.
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-4 pt-4">

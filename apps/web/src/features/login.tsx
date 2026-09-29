@@ -182,24 +182,24 @@ export function LoginPage() {
               <ShieldCheck size={14} />
               <span>Evidence-First Access Control</span>
             </div>
-            <h1 className="font-serif text-3xl sm:text-5xl font-bold tracking-tight leading-tight text-slate-900 dark:text-white drop-shadow-sm">
+            <h1 className="font-serif text-3xl sm:text-5xl font-bold tracking-tight leading-tight text-ink drop-shadow-sm">
               Enter the Evidence Mesh.
             </h1>
-            <p className="mt-3 text-sm sm:text-base text-slate-600 dark:text-zinc-200 font-normal max-w-xl mx-auto">
+            <p className="mt-3 text-sm sm:text-base text-dim font-normal max-w-xl mx-auto">
               Explore pre-seeded field verification records or launch an empty, private workspace with direct Cloudinary AI ingestion.
             </p>
           </div>
 
           {/* Mode Switcher Segmented Tabs */}
           <div className="relative mt-8 flex justify-center">
-            <div className="inline-flex p-1.5 rounded-2xl bg-black/40 dark:bg-black/50 border border-white/20 backdrop-blur-xl shadow-inner">
+            <div className="inline-flex p-1.5 rounded-2xl bg-elev2/90 border border-line backdrop-blur-xl shadow-inner">
               <button
                 type="button"
                 onClick={() => setMode('demo')}
                 className={`relative flex items-center gap-2 rounded-xl px-6 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                   mode === 'demo'
-                    ? 'bg-white/20 border border-white/30 text-white shadow-lg'
-                    : 'text-zinc-300 hover:text-white'
+                    ? 'bg-elev border border-mint/40 text-ink shadow-md'
+                    : 'text-dim hover:text-ink'
                 }`}
               >
                 {mode === 'demo' && <div className="glass-sheen rounded-xl" />}
@@ -211,8 +211,8 @@ export function LoginPage() {
                 onClick={() => setMode('custom')}
                 className={`relative flex items-center gap-2 rounded-xl px-6 py-2.5 text-xs sm:text-sm font-semibold transition-all ${
                   mode === 'custom'
-                    ? 'bg-white/20 border border-white/30 text-white shadow-lg'
-                    : 'text-zinc-300 hover:text-white'
+                    ? 'bg-elev border border-amber/40 text-ink shadow-md'
+                    : 'text-dim hover:text-ink'
                 }`}
               >
                 {mode === 'custom' && <div className="glass-sheen rounded-xl" />}
@@ -228,8 +228,8 @@ export function LoginPage() {
           {mode === 'demo' && (
             <div className="relative mt-8 space-y-4">
               <div className="flex items-center justify-between px-1">
-                <span className="font-mono text-[11px] uppercase tracking-wider text-slate-500 dark:text-zinc-300 font-semibold">
-                  Green Yamuna Collective — Pre-Seeded Dataset (3 Projects · 486 Assets · 3D Mesh)
+                <span className="font-mono text-[11px] uppercase tracking-wider text-dim font-bold">
+                  Pre-Seeded Demo Dataset (3 Projects · 486 Assets · 3D Mesh)
                 </span>
                 <button
                   type="button"
@@ -245,21 +245,21 @@ export function LoginPage() {
                 {DEMO_PEOPLE.map((person) => (
                   <div
                     key={person.email}
-                    className="glass-card group relative flex flex-col justify-between rounded-2xl p-5 overflow-hidden border border-white/20 bg-white/[0.07] hover:bg-white/[0.12] transition-all"
+                    className="glass-card group relative flex flex-col justify-between rounded-2xl p-5 overflow-hidden border border-line bg-elev/80 hover:bg-elev transition-all"
                   >
                     <div className="glass-sheen" />
                     <div>
                       {/* Top Bar: Avatar & Role Pill on opposite sides with full breathing room */}
                       <div className="flex items-center justify-between gap-2 mb-3.5">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 dark:bg-white/10 border border-slate-300 dark:border-white/20 font-mono text-base font-bold text-slate-900 dark:text-white shadow-sm">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-elev2 border border-line font-mono text-base font-bold text-ink shadow-sm">
                           {person.name[0]}
                         </div>
                         <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider font-bold border ${
                           person.role === 'owner'
-                            ? 'text-mint bg-mint/20 border-mint/40'
+                            ? 'text-mint bg-mint/15 border-mint/40'
                             : person.role === 'editor'
-                            ? 'text-sky-300 bg-sky-500/20 border-sky-400/40'
-                            : 'text-amber-300 bg-amber-500/20 border-amber-400/40'
+                            ? 'text-sky bg-sky/15 border-sky/40'
+                            : 'text-amber bg-amber/15 border-amber/40'
                         }`}>
                           {person.role}
                         </span>
@@ -267,24 +267,24 @@ export function LoginPage() {
 
                       {/* Persona Name & Email (Full Width, Zero Truncation) */}
                       <div className="mb-3">
-                        <h3 className="font-sans text-lg font-bold leading-snug text-slate-900 dark:text-white tracking-tight">
+                        <h3 className="font-sans text-xl font-bold leading-snug text-ink tracking-tight">
                           {person.name}
                         </h3>
-                        <p className="font-mono text-xs text-slate-500 dark:text-zinc-400 truncate mt-0.5">
+                        <p className="font-mono text-xs text-dim truncate mt-0.5">
                           {person.email}
                         </p>
                       </div>
 
-                      <p className="text-xs text-slate-600 dark:text-zinc-200 leading-relaxed mb-4 min-h-[44px]">
+                      <p className="text-xs text-dim leading-relaxed mb-4 min-h-[44px]">
                         {person.description}
                       </p>
 
                       {/* Capabilities Checklist */}
-                      <ul className="space-y-2.5 border-t border-white/15 dark:border-white/10 pt-4 text-xs font-mono font-medium text-slate-700 dark:text-zinc-100">
+                      <ul className="space-y-2.5 border-t border-line/60 pt-4 text-xs font-mono font-medium text-ink">
                         {person.capabilities.map((cap, idx) => (
                           <li key={idx} className="flex items-start gap-2.5">
                             <CheckCircle2 size={14} className="shrink-0 text-mint mt-0.5" />
-                            <span className="leading-snug">{cap}</span>
+                            <span className="leading-snug text-ink/90">{cap}</span>
                           </li>
                         ))}
                       </ul>
@@ -297,8 +297,8 @@ export function LoginPage() {
                       onClick={() => void enterDemo(person.email)}
                       className={`relative mt-6 w-full flex items-center justify-center gap-2 rounded-xl py-3 text-xs font-bold uppercase tracking-wider transition-all shadow-md ${
                         person.role === 'owner'
-                          ? 'bg-mint hover:bg-emerald-400 text-slate-950 shadow-mint/30 hover:scale-[1.02]'
-                          : 'bg-slate-900/10 dark:bg-white/15 hover:bg-slate-900/20 dark:hover:bg-white/25 border border-slate-300 dark:border-white/25 text-slate-900 dark:text-white hover:border-mint hover:scale-[1.02]'
+                          ? 'bg-mint hover:bg-emerald-400 text-bg shadow-mint/30 hover:scale-[1.02]'
+                          : 'bg-elev hover:bg-elev2 border border-line hover:border-mint text-ink hover:scale-[1.02]'
                       }`}
                     >
                       <span>Enter as {person.name.split(' ')[0]}</span>
@@ -315,12 +315,12 @@ export function LoginPage() {
           {/* ================================================== */}
           {mode === 'custom' && (
             <div className="relative mt-8 max-w-xl mx-auto space-y-5">
-              <div className="relative overflow-hidden rounded-2xl border border-mint/40 bg-mint/15 p-4 text-white flex items-start gap-3 backdrop-blur-md">
+              <div className="relative overflow-hidden rounded-2xl border border-mint/40 bg-mint/10 p-4 flex items-start gap-3 backdrop-blur-md">
                 <div className="glass-sheen" />
                 <Sparkles size={18} className="text-mint shrink-0 mt-0.5" />
                 <div>
                   <p className="font-bold text-sm text-mint">Clean Workspace Auto-Provisioning</p>
-                  <p className="mt-1 text-slate-600 dark:text-zinc-200 text-xs leading-relaxed">
+                  <p className="mt-1 text-dim text-xs leading-relaxed">
                     Signing in with your email provisions a brand new, empty organization. You can create projects, drop field photos for real Cloudinary AI analysis, and verify evidence from scratch.
                   </p>
                 </div>
@@ -328,56 +328,56 @@ export function LoginPage() {
 
               <form onSubmit={handleCustomSubmit} className="space-y-4">
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-wider text-slate-700 dark:text-zinc-200 font-bold mb-2">
+                  <label className="block font-mono text-xs uppercase tracking-wider text-ink font-bold mb-2">
                     Your Name
                   </label>
                   <div className="relative">
-                    <User size={16} className="absolute left-3.5 top-3.5 text-slate-400 dark:text-zinc-400" />
+                    <User size={16} className="absolute left-3.5 top-3.5 text-dim" />
                     <input
                       type="text"
                       placeholder="e.g. Mayank Garg"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      className="glass-input w-full rounded-xl pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-400 font-medium outline-none"
+                      className="w-full rounded-xl pl-11 pr-4 py-3 text-sm bg-elev border border-line text-ink placeholder:text-faint font-medium outline-none focus:border-mint shadow-sm"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-wider text-slate-700 dark:text-zinc-200 font-bold mb-2">
+                  <label className="block font-mono text-xs uppercase tracking-wider text-ink font-bold mb-2">
                     Work or Personal Email <span className="text-rose">*</span>
                   </label>
                   <div className="relative">
-                    <Mail size={16} className="absolute left-3.5 top-3.5 text-slate-400 dark:text-zinc-400" />
+                    <Mail size={16} className="absolute left-3.5 top-3.5 text-dim" />
                     <input
                       type="email"
                       required
                       placeholder="e.g. mayank@fieldtrust.org"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="glass-input w-full rounded-xl pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-400 font-medium outline-none"
+                      className="w-full rounded-xl pl-11 pr-4 py-3 text-sm bg-elev border border-line text-ink placeholder:text-faint font-medium outline-none focus:border-mint shadow-sm"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-wider text-slate-700 dark:text-zinc-200 font-bold mb-2">
+                  <label className="block font-mono text-xs uppercase tracking-wider text-ink font-bold mb-2">
                     Workspace / Organization Name (Optional)
                   </label>
                   <div className="relative">
-                    <Building size={16} className="absolute left-3.5 top-3.5 text-slate-400 dark:text-zinc-400" />
+                    <Building size={16} className="absolute left-3.5 top-3.5 text-dim" />
                     <input
                       type="text"
-                      placeholder="e.g. Aravalli Ridge Conservation Initiative"
+                      placeholder="e.g. Impact Verification Collective"
                       value={organizationName}
                       onChange={(e) => setOrganizationName(e.target.value)}
-                      className="glass-input w-full rounded-xl pl-11 pr-4 py-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-400 font-medium outline-none"
+                      className="w-full rounded-xl pl-11 pr-4 py-3 text-sm bg-elev border border-line text-ink placeholder:text-faint font-medium outline-none focus:border-mint shadow-sm"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block font-mono text-xs uppercase tracking-wider text-slate-700 dark:text-zinc-200 font-bold mb-2">
+                  <label className="block font-mono text-xs uppercase tracking-wider text-ink font-bold mb-2">
                     Select Your Role Authorization
                   </label>
                   <div className="grid grid-cols-3 gap-3">
@@ -394,13 +394,13 @@ export function LoginPage() {
                         onClick={() => setSelectedRole(item.role)}
                         className={`relative overflow-hidden rounded-xl p-3.5 text-left transition ${
                           selectedRole === item.role
-                            ? 'border-2 border-mint bg-mint/20 text-slate-900 dark:text-white shadow-[0_0_20px_rgba(94,224,181,0.3)]'
-                            : 'border border-slate-200 dark:border-white/20 bg-white/40 dark:bg-white/[0.06] text-slate-700 dark:text-zinc-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/70 dark:hover:bg-white/12'
+                            ? 'border-2 border-mint bg-mint/15 text-ink shadow-[0_0_20px_rgba(94,224,181,0.25)]'
+                            : 'border border-line bg-elev/70 text-dim hover:text-ink hover:bg-elev'
                         }`}
                       >
                         {selectedRole === item.role && <div className="glass-sheen" />}
-                        <p className="font-mono text-xs font-bold uppercase text-slate-900 dark:text-white">{item.label}</p>
-                        <p className="text-[11px] text-slate-500 dark:text-zinc-300 mt-1 line-clamp-1">{item.desc}</p>
+                        <p className="font-mono text-xs font-bold uppercase text-ink">{item.label}</p>
+                        <p className="text-[11px] text-dim mt-1 line-clamp-1">{item.desc}</p>
                       </button>
                     ))}
                   </div>
@@ -409,7 +409,7 @@ export function LoginPage() {
                 <button
                   type="submit"
                   disabled={register.isPending || !email.trim()}
-                  className="w-full mt-5 py-3.5 rounded-xl bg-mint hover:bg-emerald-400 text-slate-950 font-bold text-sm tracking-wide shadow-xl shadow-mint/30 hover:scale-[1.01] transition flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full mt-5 py-3.5 rounded-xl bg-mint hover:bg-emerald-400 text-bg font-bold text-sm tracking-wide shadow-xl shadow-mint/30 hover:scale-[1.01] transition flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   <Sparkles size={16} />
                   <span>{register.isPending ? 'Provisioning Workspace…' : 'Launch Clean Workspace'}</span>
@@ -422,17 +422,17 @@ export function LoginPage() {
           {/* ROLE CAPABILITIES GUIDE (EXPANDABLE) */}
           {/* ================================================== */}
           {showPermissionsGuide && (
-            <div className="glass-panel relative overflow-hidden mt-8 rounded-2xl p-6 border border-white/25 shadow-2xl">
+            <div className="glass-panel relative overflow-hidden mt-8 rounded-2xl p-6 border border-line shadow-2xl">
               <div className="glass-sheen" />
-              <div className="flex items-center justify-between pb-3.5 border-b border-white/15 dark:border-white/10">
+              <div className="flex items-center justify-between pb-3.5 border-b border-line">
                 <div className="flex items-center gap-2.5">
                   <Shield size={18} className="text-mint" />
-                  <span className="font-serif text-xl font-bold text-slate-900 dark:text-white">ImpactMesh Role-Based Authorization (RBAC)</span>
+                  <span className="font-serif text-xl font-bold text-ink">ImpactMesh Role-Based Authorization (RBAC)</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowPermissionsGuide(false)}
-                  className="text-xs text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white font-mono font-bold"
+                  className="text-xs text-dim hover:text-ink font-mono font-bold"
                 >
                   Close
                 </button>
@@ -444,8 +444,8 @@ export function LoginPage() {
                     <span className="font-mono font-bold uppercase text-mint text-sm">Owner</span>
                     <span className="bg-mint/20 border border-mint text-mint text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">Level 3</span>
                   </div>
-                  <p className="text-slate-600 dark:text-zinc-200 text-xs">Primary collective lead with complete authority.</p>
-                  <ul className="space-y-1.5 text-xs text-slate-700 dark:text-zinc-100 font-mono">
+                  <p className="text-dim text-xs">Primary collective lead with complete authority.</p>
+                  <ul className="space-y-1.5 text-xs text-ink font-mono">
                     <li>✓ Publish projects to public records</li>
                     <li>✓ Final evidence approval & rejection</li>
                     <li>✓ Synthesize traceable markdown briefs</li>
@@ -453,13 +453,13 @@ export function LoginPage() {
                   </ul>
                 </div>
 
-                <div className="space-y-2 rounded-xl border border-sky-400/40 bg-sky-500/10 p-4">
+                <div className="space-y-2 rounded-xl border border-sky/40 bg-sky/10 p-4">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold uppercase text-sky-400 dark:text-sky-300 text-sm">Editor</span>
-                    <span className="bg-sky-500/20 border border-sky-400 text-sky-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">Level 2</span>
+                    <span className="font-mono font-bold uppercase text-sky text-sm">Editor</span>
+                    <span className="bg-sky/20 border border-sky text-sky text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">Level 2</span>
                   </div>
-                  <p className="text-slate-600 dark:text-zinc-200 text-xs">Field technician and evidence organizer.</p>
-                  <ul className="space-y-1.5 text-xs text-slate-700 dark:text-zinc-100 font-mono">
+                  <p className="text-dim text-xs">Field technician and evidence organizer.</p>
+                  <ul className="space-y-1.5 text-xs text-ink font-mono">
                     <li>✓ Ingest field photos & videos</li>
                     <li>✓ Trigger Cloudinary AI & Jev routing</li>
                     <li>✓ Form before / after visual pairs</li>
@@ -467,13 +467,13 @@ export function LoginPage() {
                   </ul>
                 </div>
 
-                <div className="space-y-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4">
+                <div className="space-y-2 rounded-xl border border-amber/40 bg-amber/10 p-4">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold uppercase text-amber-400 dark:text-amber-300 text-sm">Viewer</span>
-                    <span className="bg-amber-500/20 border border-amber-400 text-amber-300 text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">Level 1</span>
+                    <span className="font-mono font-bold uppercase text-amber text-sm">Viewer</span>
+                    <span className="bg-amber/20 border border-amber text-amber text-[10px] font-mono px-2 py-0.5 rounded-full font-bold">Level 1</span>
                   </div>
-                  <p className="text-slate-600 dark:text-zinc-200 text-xs">External auditor or municipal observer.</p>
-                  <ul className="space-y-1.5 text-xs text-slate-700 dark:text-zinc-100 font-mono">
+                  <p className="text-dim text-xs">External auditor or municipal observer.</p>
+                  <ul className="space-y-1.5 text-xs text-ink font-mono">
                     <li>✓ Interactive 3D graph exploration</li>
                     <li>✓ Cryptographic hash verification</li>
                     <li>✓ View spatial maps & evidence nodes</li>

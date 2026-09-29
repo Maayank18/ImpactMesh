@@ -3,6 +3,7 @@ import type { MediaDetail } from '@impactmesh/shared-types'
 import { coord, formatWhenTime, percent, titleCase } from '@/lib/format'
 import { useWorkspace } from '@/stores/workspace'
 import { EvidenceImage, Eyebrow, Pill } from './ui'
+import { CloudinaryLab } from './cloudinary-lab'
 
 export function EvidenceDrawer({
   detail,
@@ -16,7 +17,7 @@ export function EvidenceDrawer({
   const media = detail.media
   const tone = media.reviewStatus === 'approved' ? 'mint' : media.reviewStatus === 'rejected' ? 'rose' : 'amber'
   return (
-    <aside className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-line bg-elev/95 p-5">
+    <aside className="flex h-full w-full max-w-md lg:max-w-lg flex-col overflow-y-auto border-l border-line bg-elev/95 p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <Eyebrow>Asset</Eyebrow>
@@ -26,7 +27,16 @@ export function EvidenceDrawer({
           Close
         </button>
       </div>
-      <EvidenceImage src={preview || media.secureUrl} alt={media.altText} className="aspect-[4/3] w-full rounded-2xl" />
+      <CloudinaryLab
+        imageUrl={preview || media.secureUrl}
+        alt={media.altText || media.filename}
+        title={media.filename}
+        latitude={media.latitude}
+        longitude={media.longitude}
+        capturedAt={media.capturedAt}
+        dHash={media.perceptualHash}
+        className="mb-3"
+      />
       <div className="mt-4 flex flex-wrap gap-2">
         <Pill tone={tone}>{media.reviewStatus}</Pill>
         <Pill>{media.aiStatus}</Pill>

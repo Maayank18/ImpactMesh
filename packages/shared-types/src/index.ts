@@ -54,6 +54,7 @@ export const GRAPH_NODE_TYPES = [
   'report',
   'partner',
   'evidence_set',
+  'category',
   'tag',
 ] as const
 export type GraphNodeType = (typeof GRAPH_NODE_TYPES)[number]
@@ -156,6 +157,15 @@ export interface EvidenceDecision {
   evidenceRole: EvidenceRole
   relation: RelationType
   activityCategory: string | null
+  contentCategory?:
+    | 'travel_landscape'
+    | 'events_gatherings'
+    | 'personal_meeting'
+    | 'work_documentation'
+    | 'field_operations'
+    | 'community_social'
+    | 'general_evidence'
+  categoryLabel?: string
   reasons: string[]
   debug?: {
     respondingModel?: string
@@ -296,9 +306,11 @@ export interface GraphNode {
   type: GraphNodeType
   label: string
   size: number
+  color?: string
   confidence?: number
   imageUrl?: string
   groupId?: string
+  clusterCount?: number
   metadata?: {
     caption?: string
     reviewStatus?: string
@@ -309,6 +321,12 @@ export interface GraphNode {
     longitude?: number
     capturedAt?: string
     city?: string
+    category?: string
+    contentCategory?: string
+    categoryLabel?: string
+    count?: number
+    description?: string
+    [key: string]: unknown
   }
 }
 
@@ -331,6 +349,7 @@ export interface GraphPayload {
 export interface ServiceStatus {
   mode: 'demo' | 'connected'
   cloudinary: boolean
+  cloudName?: string
   jev: boolean
   redis: boolean
   mongodb: boolean
@@ -473,7 +492,7 @@ export const updateMediaSchema = z.object({
 })
 
 export const createComparisonSchema = z.object({
-  projectId: z.string().min(1),
+  projectId: z.string().optional().default(''),
   title: z.string().min(2).max(160),
   beforeId: z.string().min(1),
   afterId: z.string().min(1),

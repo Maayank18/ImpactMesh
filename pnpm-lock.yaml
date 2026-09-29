@@ -104,6 +104,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@impactmesh/cloudinary-client':
+        specifier: workspace:*
+        version: link:../../packages/cloudinary-client
       '@impactmesh/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

@@ -1,8 +1,8 @@
+import { env, integrationMode, services } from './config/env'
 import { initRepository } from './data/repository'
+import { createApp } from './app'
 
 const mongoLabel = await initRepository()
-const { createApp } = await import('./app')
-const { env, integrationMode, services } = await import('./config/env')
 
 const app = createApp()
 app.listen(env.port, () => {

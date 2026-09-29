@@ -2,10 +2,24 @@ import dotenv from 'dotenv'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// Preserve runtime environment variables explicitly provided by caller/runtime
+// (e.g. scripts/dev.mjs dynamic port fallback, Render/cloud dynamic PORT, CLI)
+const runtimePort = process.env.PORT
+const runtimeFrontendUrl = process.env.FRONTEND_URL
+const runtimeApiUrl = process.env.API_URL
+
 const here = path.dirname(fileURLToPath(import.meta.url))
-dotenv.config({ path: path.resolve(here, '../../../../.env'), override: true })
-dotenv.config({ path: path.resolve(here, '../../.env'), override: true })
-dotenv.config({ override: true })
+// 1. Load apps/api/.env (service-specific config)
+dotenv.config({ path: path.resolve(here, '../../.env') })
+// 2. Load workspace root .env (shared repository config)
+dotenv.config({ path: path.resolve(here, '../../../../.env') })
+// 3. Fallback to current working directory .env if different
+dotenv.config()
+
+// Restore runtime overrides if provided by process environment
+if (runtimePort) process.env.PORT = runtimePort
+if (runtimeFrontendUrl) process.env.FRONTEND_URL = runtimeFrontendUrl
+if (runtimeApiUrl) process.env.API_URL = runtimeApiUrl
 
 function flag(value: string | undefined) {
   return Boolean(value && value.trim())
@@ -39,6 +53,16 @@ if (rawCldUrl && (!cloudName || !cloudKey || !cloudSecret)) {
   }
 }
 
+const groqKeys = [
+  process.env.GROQ_API_KEY,
+  process.env.GROQ_API_KEY_FALLBACK,
+  process.env.GROQ_API_KEY_FALLBACK_2,
+  process.env.GROQ_API_KEY_FALLBACK_3,
+  process.env.GROQ_API_KEY_FALLBACK_4,
+]
+  .map((k) => k?.trim())
+  .filter((k): k is string => Boolean(k && k.length > 5))
+
 export const env = {
   port: Number(process.env.PORT || 8787),
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -53,13 +77,15 @@ export const env = {
   typesafeKey: process.env.TYPESAFE_API_KEY || '',
   openRouterKey: process.env.OPENROUTER_API_KEY || process.env.TYPESAFE_API_KEY || '',
   jevModel: process.env.JEV_MODEL || 'typesafe/jev-router',
-  groqKey: process.env.GROQ_API_KEY || '',
+  groqKey: groqKeys[0] || '',
+  groqKeys,
   redisUrl: process.env.REDIS_URL || '',
 }
 
 export const services = {
   cloudinary: flag(env.cloudName) && flag(env.cloudKey) && flag(env.cloudSecret),
-  jev: flag(env.openRouterKey),
+  jev: flag(env.openRouterKey) || groqKeys.length > 0,
+  groq: groqKeys.length > 0,
   redis: flag(env.redisUrl),
   mongodb: true,
 }

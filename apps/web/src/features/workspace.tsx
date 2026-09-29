@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Bell,
@@ -23,6 +23,8 @@ import {
   Maximize2,
   Minimize2,
   Minus,
+  PanelLeft,
+  PanelLeftClose,
   Plus,
   RotateCcw,
   Search,
@@ -44,9 +46,13 @@ import { EvidenceGraph, type GraphHandle, type LiveNode } from '@/components/gra
 import { RadialMenu } from '@/components/radial-menu'
 import { CanvasLayers, type LayerVisibility } from '@/components/canvas-layers'
 import { CanvasUploadDropzone, type UploadBatchItem } from '@/components/canvas-upload-dropzone'
+import { CloudinaryLab } from '@/components/cloudinary-lab'
 import { ImpactMeshBrand, ImpactMeshLogo } from '@/components/logo'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Button, Eyebrow, Pill, cn } from '@/components/ui'
+import { MapPage } from '@/features/map'
+import { ComparePage } from '@/features/compare'
+import { ReportsPage } from '@/features/reports'
 import {
   useDashboard,
   useGraph,
@@ -96,12 +102,18 @@ export function WorkspacePage() {
   const [layersOpen, setLayersOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
-  const [railCollapsed, setRailCollapsed] = useState(
-    () => localStorage.getItem('impactmesh.rail_collapsed') === 'true',
-  )
+  // Sidebar is closed by default whenever /app opens
+  const [railCollapsed, setRailCollapsed] = useState(true)
 
   // Active Overlays inside Workspace
-  const [activeOverlay, setActiveOverlay] = useState<'none' | 'map' | 'compare' | 'report' | 'upload'>('none')
+  const [activeOverlay, setActiveOverlay] = useState<'none' | 'map' | 'compare' | 'report' | 'upload' | 'cld-lab'>('none')
+  const [labSelectedMediaId, setLabSelectedMediaId] = useState<string>('')
+
+  const activeLabMedia = useMemo(() => {
+    const list = media.data || []
+    if (labSelectedMediaId) return list.find((m) => m.id === labSelectedMediaId) || list[0]
+    return list[0] || null
+  }, [media.data, labSelectedMediaId])
 
   // Canvas Layer Visibilities
   const [layers, setLayers] = useState<LayerVisibility>({
@@ -152,8 +164,7 @@ export function WorkspacePage() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
       if (e.key === 'Escape') {
-        workspace.setSelectedNode(null)
-        workspace.setSelectedLink(null)
+        clearSelection()
         setActiveOverlay('none')
         setLayersOpen(false)
         setActivityOpen(false)
@@ -200,14 +211,24 @@ export function WorkspacePage() {
     })
   }
 
-  function selectNode(node: GraphNode) {
+  const selectNode = useCallback((node: GraphNode) => {
     workspace.setSelectedNode(node.id)
     if (node.type === 'location') workspace.patch({ focusLocationId: node.id })
     graphRef.current?.flyTo(node.id)
-    setParams({ node: node.id })
-  }
+    const url = new URL(window.location.href)
+    url.searchParams.set('node', node.id)
+    window.history.replaceState(null, '', url.pathname + url.search)
+  }, [workspace])
 
-  function toggleProjectCluster(projectId: string) {
+  const clearSelection = useCallback(() => {
+    workspace.setSelectedNode(null)
+    workspace.setSelectedLink(null)
+    const url = new URL(window.location.href)
+    url.searchParams.delete('node')
+    window.history.replaceState(null, '', url.pathname + (url.search || ''))
+  }, [workspace])
+
+  const toggleProjectCluster = useCallback((projectId: string) => {
     setCollapsedProjects((prev) => {
       const next = new Set(prev)
       if (next.has(projectId)) {
@@ -219,7 +240,19 @@ export function WorkspacePage() {
       }
       return next
     })
-  }
+  }, [workspace])
+
+  const handleLinkClick = useCallback((link: GraphLink) => {
+    workspace.setSelectedLink(link.id)
+  }, [workspace])
+
+  const handleNodeDouble = useCallback((node: GraphNode) => {
+    if (node.type === 'project') {
+      toggleProjectCluster(node.id)
+    } else {
+      graphRef.current?.flyTo(node.id)
+    }
+  }, [toggleProjectCluster])
 
   // Selected Project's media assets
   const selectedProjectMedia = useMemo(() => {
@@ -239,23 +272,66 @@ export function WorkspacePage() {
     return (media.data || []).filter((m) => m.activityId === selectedNode.id)
   }, [selectedNode, media.data])
 
+  // Selected Category's media assets (dynamic parent cluster)
+  const selectedCategoryMedia = useMemo(() => {
+    if (!selectedNode || selectedNode.type !== 'category') return []
+    const catId = selectedNode.id
+    const targetKey = catId.replace('cat_', '')
+    const linkedMediaIds = new Set<string>()
+    for (const l of graph.data?.links || []) {
+      const targetId = typeof l.target === 'object' && l.target !== null ? (l.target as any).id : l.target
+      const sourceId = typeof l.source === 'object' && l.source !== null ? (l.source as any).id : l.source
+      if (targetId === catId && l.relation === 'FILED_IN') {
+        linkedMediaIds.add(sourceId)
+      }
+    }
+    return (media.data || []).filter((m) => {
+      if (linkedMediaIds.has(m.id)) return true
+      const cat = m.decision?.contentCategory
+      if (cat && (cat === targetKey || cat.startsWith(targetKey))) return true
+      return false
+    })
+  }, [selectedNode, graph.data, media.data])
+
   // IN-CANVAS DRAG & DROP HANDLER (Real Cloudinary / API Pipeline)
   async function handleDropFiles(files: FileList | File[]) {
     const fileList = Array.from(files)
     if (fileList.length === 0) return
 
-    const newItems: UploadBatchItem[] = fileList.map((file, idx) => ({
-      id: `up_${Date.now()}_${idx}`,
-      file,
-      filename: file.name,
-      previewUrl: URL.createObjectURL(file),
-      progress: 15,
-      stage: 'uploading',
-      statusText: 'Requesting Cloudinary upload signature…',
-      suggestedProject: 'Yamuna River Restoration',
-      suggestedLocation: 'Nigambodh Ghat',
-      confidence: 0.94,
-    }))
+    const activeProject = projects.data?.find((p) => p.id === workspace.projectId)
+    const newItems: UploadBatchItem[] = fileList.map((file, idx) => {
+      const lower = file.name.toLowerCase()
+      const isTravel = /(switzerland|swiss|alps|mountain|lake|landscape|scenic|travel|vacation|trip|nature|beach|river|forest|outdoor|tourist|hill|valley|glacier)/.test(lower)
+      const isEvent = /(event|conf|summit|fest|party|hackathon|workshop|stage|concert|gathering|celebration)/.test(lower)
+      const isPersonal = /(whatsapp|selfie|person|meet|portrait|face|call|zoom|teams|meeting|glasses|man|woman)/.test(lower)
+      const isWork = /(code|ide|vscode|terminal|programming|slide|table|chart|invoice|receipt|diagram|wireframe|spreadsheet|excel)/.test(lower)
+      const isCommunity = /(community|volunteer|charity|aid|relief|ngo|civic)/.test(lower)
+
+      const dynamicCategory = isTravel
+        ? 'Travel & Exploration'
+        : isEvent
+          ? 'Events & Gatherings'
+          : isPersonal
+            ? 'Personal & Meetings'
+            : isWork
+              ? 'Work & Documentation'
+              : isCommunity
+                ? 'Community & Social Impact'
+                : activeProject?.name || 'General Evidence'
+
+      return {
+        id: `up_${Date.now()}_${idx}`,
+        file,
+        filename: file.name,
+        previewUrl: URL.createObjectURL(file),
+        progress: 15,
+        stage: 'uploading',
+        statusText: 'Requesting Cloudinary upload signature…',
+        suggestedProject: dynamicCategory,
+        suggestedLocation: undefined,
+        confidence: 0.92,
+      }
+    })
 
     setUploadBatch((prev) => [...newItems, ...prev])
     workspace.toast(`Ingesting ${fileList.length} field capture(s) via Cloudinary pipeline…`)
@@ -274,7 +350,7 @@ export function WorkspacePage() {
           cloudName?: string
         }>('/uploads/signature', {
           method: 'POST',
-          body: JSON.stringify({ projectId: workspace.projectId || 'proj_yamuna' }),
+          body: JSON.stringify({ projectId: workspace.projectId || undefined }),
         }).catch(() => ({ mode: 'demo' as const }))
 
         setUploadBatch((prev) =>
@@ -317,7 +393,7 @@ export function WorkspacePage() {
             body: JSON.stringify({
               publicId: uploaded.public_id,
               secureUrl: uploaded.secure_url,
-              projectId: workspace.projectId || 'proj_yamuna',
+              projectId: workspace.projectId || null,
               filename: item.filename,
               width: uploaded.width,
               height: uploaded.height,
@@ -335,10 +411,34 @@ export function WorkspacePage() {
           registeredMediaId = media?.id ?? null
         }
 
+        // Check for AI analysis result from backend
+        let resolvedCategory = item.suggestedProject
+        let resolvedLocation = item.suggestedLocation
+        if (registeredMediaId) {
+          try {
+            const mediaDetail = await api<{ media: { decision?: { categoryLabel?: string }; locationId?: string }; location?: { name: string } }>(`/media/${registeredMediaId}`)
+            if (mediaDetail?.media?.decision?.categoryLabel) {
+              resolvedCategory = mediaDetail.media.decision.categoryLabel
+            }
+            if (mediaDetail?.location?.name) {
+              resolvedLocation = mediaDetail.location.name
+            }
+          } catch {
+            // fallback to heuristic
+          }
+        }
+
         setUploadBatch((prev) =>
           prev.map((b) =>
             b.id === item.id
-              ? { ...b, progress: 85, stage: 'location', statusText: 'Resolving EXIF GPS & spatial centroid…' }
+              ? {
+                  ...b,
+                  progress: 85,
+                  stage: 'location',
+                  suggestedProject: resolvedCategory,
+                  suggestedLocation: resolvedLocation,
+                  statusText: 'Checking EXIF GPS & AI vision signals…',
+                }
               : b,
           ),
         )
@@ -347,7 +447,7 @@ export function WorkspacePage() {
           setUploadBatch((prev) =>
             prev.map((b) =>
               b.id === item.id
-                ? { ...b, progress: 100, stage: 'review', statusText: 'Linked to evidence mesh in 3D graph' }
+                ? { ...b, progress: 100, stage: 'review', statusText: `Linked to ${resolvedCategory} cluster` }
                 : b,
             ),
           )
@@ -403,32 +503,35 @@ export function WorkspacePage() {
       )}
 
       {/* ================================================== */}
-      {/* 1. COMPACT LEFT CONTEXT RAIL */}
+      {/* 1. SLIDE-OVER CONTEXT SIDEBAR (GPU-accelerated overlay) */}
       {/* ================================================== */}
+      {!railCollapsed && (
+        <div
+          onClick={() => setRailCollapsed(true)}
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-150"
+          aria-hidden="true"
+        />
+      )}
+
       <aside
         className={cn(
-          'no-print relative z-30 flex flex-col border-r border-line/60 bg-bg/95 backdrop-blur-xl transition-all duration-300',
-          railCollapsed ? 'w-16 p-2.5' : 'w-56 p-3.5',
+          'no-print fixed inset-y-0 left-0 z-50 flex flex-col w-64 border-r border-line/60 bg-bg/98 backdrop-blur-2xl shadow-2xl p-4',
+          'transition-transform duration-200 ease-out will-change-transform',
+          railCollapsed ? '-translate-x-full pointer-events-none' : 'translate-x-0 pointer-events-auto',
         )}
       >
         {/* Brand Lockup */}
-        <div className="flex items-center justify-between gap-2 pb-2">
-          {railCollapsed ? (
-            <Link to="/" className="mx-auto py-1" title="ImpactMesh Home">
-              <ImpactMeshLogo size="sm" variant="badge" />
-            </Link>
-          ) : (
-            <Link to="/" className="px-1.5 py-1 transition hover:opacity-90" title="ImpactMesh Home">
-              <ImpactMeshBrand size="sm" />
-            </Link>
-          )}
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-line/60">
+          <Link to="/" className="px-1 py-1 transition hover:opacity-90" title="ImpactMesh Home">
+            <ImpactMeshBrand size="sm" />
+          </Link>
 
           <button
             onClick={toggleRail}
-            title={railCollapsed ? 'Expand rail (Ctrl+B)' : 'Collapse rail (Ctrl+B)'}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-faint hover:bg-white/5 hover:text-ink transition"
+            title="Close sidebar (Ctrl+B)"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-faint hover:bg-white/10 hover:text-ink transition"
           >
-            <ChevronRight size={14} className={cn('transition-transform duration-300', !railCollapsed && 'rotate-180')} />
+            <PanelLeftClose size={15} />
           </button>
         </div>
 
@@ -663,56 +766,75 @@ export function WorkspacePage() {
         {/* -------------------------------------------------- */}
         {/* TOP MINIMAL HUD */}
         {/* -------------------------------------------------- */}
-        <header className="absolute top-3 inset-x-4 z-30 pointer-events-none flex items-center justify-between gap-3">
+        <header className="absolute top-2.5 inset-x-2.5 sm:inset-x-3 z-30 pointer-events-none flex items-center justify-between gap-1 sm:gap-2">
           {/* Left: Quick Canvas Controls */}
-          <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-white/10 bg-elev/85 p-1.5 backdrop-blur-xl shadow-2xl">
+          <div className="pointer-events-auto h-8 flex items-center gap-0.5 sm:gap-1 rounded-xl border border-white/10 bg-elev/90 px-1 backdrop-blur-xl shadow-lg shrink-0">
+            {/* Sidebar Toggle Button */}
+            <button
+              onClick={toggleRail}
+              title={railCollapsed ? 'Open Sidebar (Ctrl+B)' : 'Close Sidebar (Ctrl+B)'}
+              className={cn(
+                'h-6 flex items-center gap-1 rounded-lg px-2 text-[11px] transition font-medium',
+                !railCollapsed
+                  ? 'bg-mint text-slate-950 font-semibold shadow-xs'
+                  : 'text-dim hover:text-ink hover:bg-white/10',
+              )}
+            >
+              {railCollapsed ? <PanelLeft size={12} className="text-mint" /> : <PanelLeftClose size={12} />}
+              <span className="hidden sm:inline">Sidebar</span>
+            </button>
+
+            <span className="h-3.5 w-px bg-white/10 mx-0.5" />
+
             <button
               onClick={() => graphRef.current?.zoom(1)}
               title="Zoom in (+)"
-              className="grid h-8 w-8 place-items-center rounded-xl text-dim hover:bg-white/10 hover:text-ink transition"
+              className="grid h-6 w-6 place-items-center rounded-md text-dim hover:bg-white/10 hover:text-ink transition"
             >
-              <Plus size={15} />
+              <Plus size={13} />
             </button>
             <button
               onClick={() => graphRef.current?.zoom(-1)}
               title="Zoom out (-)"
-              className="grid h-8 w-8 place-items-center rounded-xl text-dim hover:bg-white/10 hover:text-ink transition"
+              className="grid h-6 w-6 place-items-center rounded-md text-dim hover:bg-white/10 hover:text-ink transition"
             >
-              <Minus size={15} />
+              <Minus size={13} />
             </button>
             <button
               onClick={() => graphRef.current?.zoomToFit()}
               title="Fit to view (Z)"
-              className="flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs text-dim hover:bg-white/10 hover:text-ink transition"
+              className="h-6 flex items-center gap-1 rounded-md px-1.5 text-[11px] text-dim hover:bg-white/10 hover:text-ink transition"
             >
-              <RotateCcw size={12} />
-              <span>Reset</span>
+              <RotateCcw size={11} />
+              <span className="hidden md:inline">Reset</span>
             </button>
+
+            <span className="h-3.5 w-px bg-white/10 mx-0.5" />
 
             {/* Photos in 3D scene toggle */}
             <button
               onClick={() => setLayers((prev) => ({ ...prev, media: !prev.media }))}
-              title="Toggle Photo Thumbnails in 3D Scene"
+              title="Toggle Photos in 3D Scene"
               className={cn(
-                'flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs transition font-medium',
-                layers.media ? 'bg-mint text-bg shadow-sm' : 'text-dim hover:text-ink',
+                'h-6 flex items-center gap-1 rounded-md px-1.5 sm:px-2 text-[11px] transition font-medium',
+                layers.media ? 'bg-mint text-slate-950 font-bold' : 'text-dim hover:text-ink hover:bg-white/10',
               )}
             >
-              <Camera size={13} />
-              <span>Photos</span>
+              <Camera size={12} />
+              <span className="hidden xl:inline">Photos</span>
             </button>
 
             {/* Labels toggle */}
             <button
               onClick={() => workspace.patch({ showLabels: !workspace.showLabels })}
-              title="Toggle node labels"
+              title="Toggle Text Labels"
               className={cn(
-                'flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs transition',
-                workspace.showLabels ? 'text-mint' : 'text-dim hover:text-ink',
+                'h-6 flex items-center gap-1 rounded-md px-1.5 sm:px-2 text-[11px] transition font-medium',
+                workspace.showLabels ? 'text-mint' : 'text-dim hover:text-ink hover:bg-white/10',
               )}
             >
-              <Tag size={12} />
-              <span>Labels</span>
+              <Tag size={11} />
+              <span className="hidden xl:inline">Labels</span>
             </button>
 
             {/* Layers Filter Toggle */}
@@ -720,41 +842,41 @@ export function WorkspacePage() {
               onClick={() => setLayersOpen((prev) => !prev)}
               title="Toggle Canvas Layers"
               className={cn(
-                'flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-xs transition',
-                layersOpen ? 'bg-white/15 text-ink' : 'text-dim hover:text-ink',
+                'h-6 flex items-center gap-1 rounded-md px-1.5 sm:px-2 text-[11px] transition',
+                layersOpen ? 'bg-white/20 text-white font-medium' : 'text-dim hover:text-ink hover:bg-white/10',
               )}
             >
-              <Layers size={13} />
-              <span>Layers</span>
+              <Layers size={12} />
+              <span className="hidden xl:inline">Layers</span>
             </button>
           </div>
 
-          {/* Center: Global Semantic Evidence Search */}
-          <div className="pointer-events-auto relative max-w-md w-full">
+          {/* Center: Global Semantic Evidence Search (Adaptive & sleek) */}
+          <div className="pointer-events-auto relative flex-1 min-w-[120px] max-w-xs sm:max-w-sm md:max-w-md mx-1 sm:mx-1.5">
             <div className="relative flex items-center">
-              <Search size={14} className="absolute left-3.5 text-faint pointer-events-none" />
+              <Search size={13} className="absolute left-2.5 text-faint pointer-events-none" />
               <input
                 ref={searchInputRef}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 250)}
-                placeholder="Search evidence, places, activities... (Ctrl+K)"
-                className="w-full rounded-2xl border border-white/15 bg-elev/90 pl-9 pr-8 py-2 text-xs text-ink outline-none placeholder:text-faint focus:border-mint focus:shadow-[0_0_20px_rgba(94,224,181,0.2)] backdrop-blur-xl transition"
+                placeholder="Search evidence... (Ctrl+K)"
+                className="w-full h-8 rounded-xl border border-white/12 bg-elev/90 pl-7 pr-6 text-[11px] text-ink outline-none placeholder:text-faint focus:border-mint focus:shadow-[0_0_15px_rgba(94,224,181,0.2)] backdrop-blur-xl transition"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 text-faint hover:text-ink"
+                  className="absolute right-2 text-faint hover:text-ink"
                 >
-                  <X size={12} />
+                  <X size={11} />
                 </button>
               )}
             </div>
 
             {/* Instant Search Results Dropdown */}
             {searchFocused && searchQuery.trim() && searchResults.data && (
-              <div className="absolute top-11 inset-x-0 z-40 max-h-80 overflow-y-auto rounded-2xl border border-white/15 bg-elev/95 p-2 shadow-2xl backdrop-blur-2xl">
+              <div className="absolute top-10 inset-x-0 z-40 max-h-80 overflow-y-auto rounded-2xl border border-white/15 bg-elev/95 p-2 shadow-2xl backdrop-blur-2xl">
                 <div className="px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-faint border-b border-line">
                   {searchResults.data.results.length} Search Matches
                 </div>
@@ -764,8 +886,7 @@ export function WorkspacePage() {
                     <button
                       key={hit.media.id}
                       onClick={() => {
-                        workspace.setSelectedNode(hit.media.id)
-                        graphRef.current?.flyTo(hit.media.id)
+                        selectNode({ id: hit.media.id, label: hit.media.filename, type: 'media' } as any)
                         setSearchQuery('')
                       }}
                       className="w-full flex items-center gap-2.5 rounded-xl p-2 text-left hover:bg-white/5 transition"
@@ -787,60 +908,76 @@ export function WorkspacePage() {
             )}
           </div>
 
-          {/* Right: Summary Strip Pill + Fullscreen */}
-          <div className="pointer-events-auto flex items-center gap-2">
-            {/* Summary Strip Pill (Section 24) */}
+          {/* Right: Summary Strip Pill + Status + Fullscreen */}
+          <div className="pointer-events-auto flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* Compact Responsive Summary Strip */}
             <button
               onClick={() => setActivityOpen((prev) => !prev)}
-              title="Click to view recent activity & audit log"
-              className="hidden lg:flex items-center gap-3 rounded-2xl border border-white/10 bg-elev/85 px-3.5 py-1.5 font-mono text-[10px] text-dim backdrop-blur-xl shadow-xl hover:border-mint/40 hover:text-ink transition"
+              title="Workspace Statistics & Activity"
+              className="hidden lg:flex items-center gap-1.5 h-8 rounded-xl border border-white/10 bg-elev/90 px-2 sm:px-2.5 font-mono text-[10px] text-dim backdrop-blur-xl shadow-lg hover:border-mint/40 hover:text-ink transition"
             >
               <span>
-                <strong className="text-mint">{dashboard.data?.stats.projects ?? 12}</strong> Projects
+                <strong className="text-mint">{dashboard.data?.stats.projects ?? 3}</strong> Proj
               </span>
               <span className="text-line">·</span>
               <span>
-                <strong className="text-ink">{dashboard.data?.stats.media ?? 486}</strong> Media
+                <strong className="text-ink">{dashboard.data?.stats.media ?? 14}</strong> Media
               </span>
               <span className="text-line">·</span>
               <span>
-                <strong className="text-amber">{dashboard.data?.stats.locations ?? 14}</strong> Places
+                <strong className="text-amber">{dashboard.data?.stats.locations ?? 5}</strong> Places
               </span>
-
               {pendingReviews > 0 && (
                 <>
                   <span className="text-line">·</span>
-                  <span className="flex items-center gap-1 text-amber">
+                  <span className="flex items-center gap-1 text-amber font-bold">
                     <span className="h-1.5 w-1.5 rounded-full bg-amber animate-pulse" />
-                    <span>{pendingReviews} Pending</span>
+                    <span>{pendingReviews}</span>
                   </span>
                 </>
               )}
             </button>
 
-            {/* Cloudinary Live Media Intelligence Badge */}
-            <div
-              className="hidden sm:flex items-center gap-2 rounded-2xl border border-line bg-elev/85 px-3 py-1.5 font-mono text-[10px] text-dim backdrop-blur-xl shadow-xl transition"
-              title={me.data?.services.cloudinary ? 'Cloudinary CDN & AI Vision Active' : 'Cloudinary Media Intelligence Engine Ready (Demo Sandbox)'}
-            >
-              <span className={cn('h-2 w-2 rounded-full', me.data?.services.cloudinary ? 'bg-mint animate-pulse' : 'bg-sky animate-pulse')} />
-              <span className="font-semibold text-ink">Cloudinary AI</span>
-              <span className="text-line">·</span>
-              <span className={me.data?.services.cloudinary ? 'text-mint font-medium' : 'text-sky font-medium'}>
-                {me.data?.services.cloudinary ? 'Connected' : 'Vision Engine Ready'}
-              </span>
-            </div>
+            {/* Mobile/Tablet Pending Reviews Badge */}
+            {pendingReviews > 0 && (
+              <button
+                onClick={() => navigate('/app/review')}
+                title={`${pendingReviews} pending reviews`}
+                className="lg:hidden flex items-center gap-1 h-8 rounded-xl border border-amber/30 bg-amber/10 px-2 font-mono text-[10px] text-amber font-bold"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber animate-pulse" />
+                <span>{pendingReviews}</span>
+              </button>
+            )}
 
-            {/* Theme Toggler (Bright Graph Paper / Dark Blueprint) */}
-            <ThemeToggle />
+            {/* Cloudinary Live Media Intelligence Badge & 1-Click Lab Launcher */}
+            <button
+              onClick={() => setActiveOverlay((prev) => (prev === 'cld-lab' ? 'none' : 'cld-lab'))}
+              className={cn(
+                'hidden md:flex items-center gap-1.5 h-8 rounded-xl border px-2.5 font-mono text-[10px] backdrop-blur-xl shadow-lg transition cursor-pointer',
+                activeOverlay === 'cld-lab'
+                  ? 'border-mint bg-mint/20 text-mint ring-1 ring-mint/40 shadow-[0_0_14px_rgba(94,224,181,0.35)]'
+                  : 'border-line bg-elev/90 text-dim hover:text-ink hover:border-mint/50 hover:bg-elev2',
+              )}
+              title="1-Click: Open Cloudinary AI Forensic Lab"
+            >
+              <span className={cn('h-1.5 w-1.5 rounded-full', me.data?.services.cloudinary ? 'bg-mint animate-pulse' : 'bg-sky')} />
+              <span className="font-semibold text-ink hidden xl:inline">Cloudinary AI</span>
+              <span className={me.data?.services.cloudinary ? 'text-mint font-medium' : 'text-sky font-medium'}>
+                {activeOverlay === 'cld-lab' ? 'Lab Open' : 'Forensic Lab'}
+              </span>
+            </button>
+
+            {/* Theme Toggler */}
+            <ThemeToggle className="h-8 py-1" />
 
             {/* Fullscreen Button */}
             <button
               onClick={toggleFullscreen}
-              className="flex h-9 w-9 items-center justify-center rounded-2xl border border-line bg-elev/85 text-dim hover:text-ink hover:bg-white/10 backdrop-blur-xl shadow-xl transition"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-line bg-elev/90 text-dim hover:text-ink hover:bg-white/10 backdrop-blur-xl shadow-lg transition"
               title={isFullscreen ? 'Exit Full Screen' : 'Full Viewport Canvas'}
             >
-              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
             </button>
           </div>
         </header>
@@ -913,14 +1050,8 @@ export function WorkspacePage() {
             layers={layers}
             collapsedProjects={collapsedProjects}
             onNode={selectNode}
-            onLink={(link: GraphLink) => workspace.setSelectedLink(link.id)}
-            onDouble={(node) => {
-              if (node.type === 'project') {
-                toggleProjectCluster(node.id)
-              } else {
-                graphRef.current?.flyTo(node.id)
-              }
-            }}
+            onLink={handleLinkClick}
+            onDouble={handleNodeDouble}
           />
         ) : (
           <div className="grid h-full place-items-center font-mono text-xs uppercase tracking-widest text-dim">
@@ -1139,10 +1270,21 @@ export function WorkspacePage() {
         {/* -------------------------------------------------- */}
         {/* RADIAL COMMAND TOOL SYSTEM (Section 9) */}
         {/* -------------------------------------------------- */}
-        <div className="absolute bottom-6 left-6 z-30">
+        <div className="absolute bottom-6 left-6 z-40">
           <RadialMenu
+            onCanvas={() => {
+              setActiveOverlay('none')
+              workspace.setSelectedNode(null)
+              workspace.setSelectedLink(null)
+              graphRef.current?.zoomToFit()
+            }}
+            onProjects={() => navigate('/app/projects')}
+            onEvidence={() => navigate('/app/evidence')}
+            onMap={() => setActiveOverlay((prev) => (prev === 'map' ? 'none' : 'map'))}
+            onCompare={() => setActiveOverlay((prev) => (prev === 'compare' ? 'none' : 'compare'))}
+            onReport={() => setActiveOverlay((prev) => (prev === 'report' ? 'none' : 'report'))}
+            onReview={() => navigate('/app/review')}
             onUpload={() => {
-              // Trigger hidden file input or dropzone
               const input = document.createElement('input')
               input.type = 'file'
               input.multiple = true
@@ -1153,12 +1295,13 @@ export function WorkspacePage() {
               }
               input.click()
             }}
-            onMap={() => setActiveOverlay((prev) => (prev === 'map' ? 'none' : 'map'))}
-            onCompare={() => setActiveOverlay((prev) => (prev === 'compare' ? 'none' : 'compare'))}
-            onReport={() => setActiveOverlay((prev) => (prev === 'report' ? 'none' : 'report'))}
-            onEvidence={() => navigate('/app/evidence')}
             onSearch={() => searchInputRef.current?.focus()}
             onLayers={() => setLayersOpen((prev) => !prev)}
+            onCloudinaryLab={() => setActiveOverlay((prev) => (prev === 'cld-lab' ? 'none' : 'cld-lab'))}
+            onToggleSidebar={toggleRail}
+            activeOverlay={activeOverlay}
+            pendingReviews={pendingReviews}
+            railCollapsed={railCollapsed}
           />
         </div>
 
@@ -1166,23 +1309,26 @@ export function WorkspacePage() {
         {/* FLOATING TOPOLOGY MINIMAP/COMPASS LEGEND */}
         {/* -------------------------------------------------- */}
         <div className="pointer-events-none absolute bottom-6 right-6 z-20 hidden md:block">
-          <div className="rounded-2xl border border-white/10 bg-bg/80 p-3 text-[11px] backdrop-blur-md shadow-2xl">
-            <div className="flex items-center justify-between pb-1.5 border-b border-line/60">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-faint">Topology</span>
-              <span className="font-mono text-[9px] text-mint">Interactive 3D</span>
+          <div className="rounded-2xl border border-white/15 bg-zinc-950/85 p-3 text-[11px] backdrop-blur-xl shadow-2xl">
+            <div className="flex items-center justify-between pb-1.5 border-b border-white/10">
+              <span className="font-mono text-[9px] uppercase tracking-wider text-slate-400">3D Mesh Topology</span>
+              <span className="font-mono text-[9px] text-mint flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-mint animate-pulse" />
+                <span>Active</span>
+              </span>
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-dim font-mono text-[10px]">
+            <div className="mt-2 grid grid-cols-2 gap-x-3.5 gap-y-1.5 text-slate-300 font-mono text-[10px]">
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-mint" /> Project Hub
+                <span className="h-2 w-2 rounded-full bg-mint shadow-[0_0_6px_#5ee0b5]" /> Project Hub
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-amber" /> GPS Centroid
+                <span className="h-2 w-2 rounded-full bg-amber shadow-[0_0_6px_#e4b15a]" /> GPS Centroid
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-sky" /> Activity Cone
+                <span className="h-2 w-2 rounded-full bg-sky shadow-[0_0_6px_#8eb7ff]" /> Activity Cone
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[#f0d7b0]" /> Brief Slab
+                <span className="h-2 w-2 rounded-full bg-[#f0d7b0] shadow-[0_0_6px_#f0d7b0]" /> Brief Slab
               </span>
             </div>
           </div>
@@ -1210,9 +1356,12 @@ export function WorkspacePage() {
         {/* 3. RIGHT CONTEXTUAL INSPECTOR (Section 12) */}
         {/* ================================================== */}
         {selectedNode && (
-          <aside className="absolute right-0 inset-y-0 z-30 w-96 border-l border-white/15 bg-elev/95 p-5 shadow-2xl backdrop-blur-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-300">
+          <aside className="absolute right-0 inset-y-0 z-40 w-[450px] max-w-[calc(100vw-32px)] border-l border-white/15 bg-zinc-950/95 p-5 shadow-[0_0_80px_rgba(0,0,0,0.85)] backdrop-blur-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-250 ease-out">
+            {/* Top Glowing Sheen Accent */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-mint via-sky to-amber" />
+
             {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-line">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div className="flex items-center gap-2">
                 <Pill
                   tone={
@@ -1222,19 +1371,21 @@ export function WorkspacePage() {
                         ? 'amber'
                         : selectedNode.type === 'activity'
                           ? 'sky'
-                          : 'mint'
+                          : selectedNode.type === 'category'
+                            ? 'mint'
+                            : 'mint'
                   }
                 >
-                  {titleCase(selectedNode.type)} Record
+                  {selectedNode.type === 'category' ? 'Category Cluster' : `${titleCase(selectedNode.type)} Record`}
                 </Pill>
-                <span className="font-mono text-[10px] text-faint truncate">{selectedNode.id}</span>
+                <span className="font-mono text-[10px] text-faint truncate max-w-[120px]">{selectedNode.id}</span>
               </div>
               <button
-                onClick={() => workspace.setSelectedNode(null)}
-                className="rounded-xl p-1 text-dim hover:bg-white/5 hover:text-ink transition"
+                onClick={clearSelection}
+                className="grid h-7 w-7 place-items-center rounded-lg text-dim hover:bg-white/10 hover:text-ink transition"
                 title="Close Inspector (Esc)"
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
 
@@ -1253,20 +1404,32 @@ export function WorkspacePage() {
               {/* MEDIA NODE SPECIFIC INSPECTOR */}
               {selectedNode.type === 'media' && (
                 <div className="space-y-4">
-                  {/* Photo Thumbnail */}
-                  {selectedNode.imageUrl && (
-                    <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-                      <img src={selectedNode.imageUrl} alt="" className="aspect-[16/10] w-full object-cover" />
-                    </div>
+                  {/* Cloudinary AI Forensic Lab Interactive Switcher */}
+                  {(selectedNode.imageUrl || mediaDetail.data?.media.secureUrl) && (
+                    <CloudinaryLab
+                      imageUrl={selectedNode.imageUrl || mediaDetail.data?.media.secureUrl || ''}
+                      alt={selectedNode.label}
+                      title={selectedNode.label}
+                      latitude={selectedNode.metadata?.latitude ?? mediaDetail.data?.media.latitude}
+                      longitude={selectedNode.metadata?.longitude ?? mediaDetail.data?.media.longitude}
+                      capturedAt={selectedNode.metadata?.capturedAt ?? mediaDetail.data?.media.capturedAt}
+                      dHash={mediaDetail.data?.media.perceptualHash || '0x1111000011110000'}
+                      defaultMode="standard"
+                      compact={false}
+                    />
                   )}
 
                   {/* Verification Badge */}
                   <div className="flex items-center justify-between rounded-xl border border-mint/30 bg-mint/5 p-3">
                     <div className="flex items-center gap-2">
                       <ShieldCheck size={18} className="text-mint" />
-                      <span className="font-mono text-xs font-semibold text-mint">95% Verified Evidence</span>
+                      <span className="font-mono text-xs font-semibold text-mint">
+                        {((selectedNode.confidence || 0.95) * 100).toFixed(0)}% Verified Evidence
+                      </span>
                     </div>
-                    <span className="font-mono text-[10px] text-dim">Review Signed</span>
+                    <span className="font-mono text-[10px] text-dim">
+                      {mediaDetail.data?.media.reviewStatus === 'approved' ? 'Signed Review' : 'Auto-Clustered'}
+                    </span>
                   </div>
 
                   {/* EXIF GPS Centroid */}
@@ -1292,29 +1455,39 @@ export function WorkspacePage() {
                       <li className="flex items-start gap-2">
                         <CheckCircle2 size={12} className="text-mint mt-0.5 shrink-0" />
                         <div>
-                          <strong className="text-ink">Original capture:</strong>
-                          <span className="text-dim block">EXIF confirmed · Sony A7IV</span>
+                          <strong className="text-ink">Category Routing:</strong>
+                          <span className="text-dim block">
+                            {selectedNode.metadata?.categoryLabel || selectedNode.metadata?.contentCategory || 'Dynamic Cluster'} · {((selectedNode.confidence || 0.95) * 100).toFixed(0)}% confidence
+                          </span>
                         </div>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 size={12} className="text-mint mt-0.5 shrink-0" />
                         <div>
-                          <strong className="text-ink">Cloudinary Vision:</strong>
-                          <span className="text-dim block">Native saplings · 0.94 confidence</span>
+                          <strong className="text-ink">Vision AI Signals:</strong>
+                          <span className="text-dim block">
+                            {mediaDetail.data?.media.signals && mediaDetail.data.media.signals.length > 0
+                              ? mediaDetail.data.media.signals.slice(0, 3).map((s) => s.normalizedTag).join(' · ')
+                              : 'AI classification verified'}
+                          </span>
                         </div>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 size={12} className="text-mint mt-0.5 shrink-0" />
                         <div>
                           <strong className="text-ink">Perceptual dHash:</strong>
-                          <span className="text-dim block">0x1111000011110000 (collision clear)</span>
+                          <span className="text-dim block font-mono">
+                            {mediaDetail.data?.media.perceptualHash || '0x1111000011110000'} (collision clear)
+                          </span>
                         </div>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 size={12} className="text-mint mt-0.5 shrink-0" />
                         <div>
-                          <strong className="text-ink">Human Gatekeeper:</strong>
-                          <span className="text-dim block">Approved by Asha Mehra</span>
+                          <strong className="text-ink">Pipeline Status:</strong>
+                          <span className="text-dim block">
+                            {mediaDetail.data?.media.reviewStatus === 'approved' ? 'Approved into verified record' : 'Ingested into dynamic orbit'}
+                          </span>
                         </div>
                       </li>
                     </ul>
@@ -1445,12 +1618,67 @@ export function WorkspacePage() {
                   </div>
                 </div>
               )}
+
+              {/* CATEGORY NODE SPECIFIC INSPECTOR */}
+              {selectedNode.type === 'category' && (
+                <div className="space-y-4">
+                  {/* Category Cluster Overview Card */}
+                  <div className="rounded-2xl border border-white/10 bg-elev2/60 p-4 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-faint flex items-center gap-1.5">
+                        <Sparkles size={13} className="text-mint" />
+                        <span>Dynamic Parent Cluster</span>
+                      </span>
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-full bg-mint/15 text-mint border border-mint/30">
+                        {selectedCategoryMedia.length} Assets In Orbit
+                      </span>
+                    </div>
+                    <p className="text-xs text-dim leading-relaxed">
+                      AI Evidence Routing clustered all incoming assets matching <strong className="text-ink">{selectedNode.label}</strong> into this dedicated parent node.
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-faint block pb-2">
+                      Assets In This Cluster ({selectedCategoryMedia.length})
+                    </span>
+                    {selectedCategoryMedia.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/10 p-5 text-center">
+                        <p className="text-xs text-faint font-mono">No media loaded yet</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedCategoryMedia.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              workspace.setSelectedNode(item.id)
+                              graphRef.current?.flyTo(item.id)
+                            }}
+                            className="group overflow-hidden rounded-xl border border-line bg-elev/40 p-1.5 text-left hover:border-mint/50 transition"
+                          >
+                            <img
+                              src={item.secureUrl}
+                              alt=""
+                              className="aspect-[4/3] w-full rounded-lg object-cover group-hover:scale-105 transition"
+                            />
+                            <p className="mt-1.5 truncate font-mono text-[10px] text-ink font-medium">{item.filename}</p>
+                            {item.decision?.categoryLabel && (
+                              <p className="truncate font-mono text-[9px] text-dim">{item.decision.categoryLabel}</p>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Close Inspector */}
             <div className="mt-4 pt-3 border-t border-line/60">
               <button
-                onClick={() => workspace.setSelectedNode(null)}
+                onClick={clearSelection}
                 className="w-full rounded-xl border border-line py-2 text-xs text-dim hover:text-ink hover:bg-white/5 transition"
               >
                 Close Inspector
@@ -1461,11 +1689,11 @@ export function WorkspacePage() {
       </main>
 
       {/* ================================================== */}
-      {/* 4. INTEGRATED NON-DESTRUCTIVE OVERLAYS */}
+      {/* 4. INTEGRATED NON-DESTRUCTIVE OVERLAYS (Native React Components) */}
       {/* ================================================== */}
       {/* A. MAP OVERLAY */}
       {activeOverlay === 'map' && (
-        <div className="absolute inset-y-0 right-0 z-40 w-[600px] max-w-[calc(100vw-64px)] border-l border-white/15 bg-bg/95 backdrop-blur-2xl shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="absolute inset-y-0 right-0 z-40 w-[640px] max-w-[calc(100vw-64px)] border-l border-white/15 bg-bg/98 backdrop-blur-2xl shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
           <div className="flex items-center justify-between border-b border-line p-4">
             <div className="flex items-center gap-2">
               <Compass size={16} className="text-amber" />
@@ -1480,12 +1708,8 @@ export function WorkspacePage() {
           </div>
 
           <div className="flex-1 overflow-hidden p-4">
-            <div className="h-full rounded-2xl border border-white/10 overflow-hidden">
-              <iframe
-                src="/app/map"
-                title="Spatial Map"
-                className="h-full w-full border-none"
-              />
+            <div className="h-full rounded-2xl border border-white/10 overflow-hidden bg-bg">
+              <MapPage />
             </div>
           </div>
         </div>
@@ -1493,7 +1717,7 @@ export function WorkspacePage() {
 
       {/* B. COMPARE LAB OVERLAY */}
       {activeOverlay === 'compare' && (
-        <div className="absolute inset-y-0 right-0 z-40 w-[720px] max-w-[calc(100vw-64px)] border-l border-white/15 bg-bg/95 backdrop-blur-2xl shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="absolute inset-y-0 right-0 z-40 w-[740px] max-w-[calc(100vw-64px)] border-l border-white/15 bg-bg/98 backdrop-blur-2xl shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
           <div className="flex items-center justify-between border-b border-line p-4">
             <div className="flex items-center gap-2">
               <Columns2 size={16} className="text-sky" />
@@ -1508,18 +1732,16 @@ export function WorkspacePage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <iframe
-              src="/app/compare"
-              title="Compare Lab"
-              className="h-full min-h-[500px] w-full border-none rounded-2xl"
-            />
+            <div className="h-full min-h-[500px] w-full rounded-2xl border border-white/10 overflow-hidden bg-bg">
+              <ComparePage />
+            </div>
           </div>
         </div>
       )}
 
       {/* C. REPORT BUILDER OVERLAY */}
       {activeOverlay === 'report' && (
-        <div className="absolute inset-y-0 right-0 z-40 w-[640px] max-w-[calc(100vw-64px)] border-l border-white/15 bg-bg/95 backdrop-blur-2xl shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+        <div className="absolute inset-y-0 right-0 z-40 w-[680px] max-w-[calc(100vw-64px)] border-l border-white/15 bg-bg/98 backdrop-blur-2xl shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
           <div className="flex items-center justify-between border-b border-line p-4">
             <div className="flex items-center gap-2">
               <FileText size={16} className="text-[#f0d7b0]" />
@@ -1534,11 +1756,77 @@ export function WorkspacePage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            <iframe
-              src="/app/reports"
-              title="Reports"
-              className="h-full min-h-[500px] w-full border-none rounded-2xl"
-            />
+            <div className="h-full min-h-[500px] w-full rounded-2xl border border-white/10 overflow-hidden bg-bg">
+              <ReportsPage />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* D. DEDICATED CLOUDINARY AI FORENSIC LAB OVERLAY SUITE */}
+      {activeOverlay === 'cld-lab' && (
+        <div className="absolute inset-y-0 right-0 z-40 w-[780px] max-w-[calc(100vw-64px)] border-l border-white/15 bg-zinc-950/98 backdrop-blur-2xl shadow-2xl flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
+          <div className="flex items-center justify-between border-b border-line/60 p-4">
+            <div className="flex items-center gap-2">
+              <div className="grid h-7 w-7 place-items-center rounded-lg bg-mint/15 text-mint border border-mint/30 shadow-[0_0_10px_rgba(94,224,181,0.3)]">
+                <Zap size={15} className="animate-pulse" />
+              </div>
+              <div>
+                <h3 className="font-mono text-sm font-semibold text-ink">Cloudinary AI Forensic Lab</h3>
+                <p className="font-mono text-[10px] text-dim">Interactive Edge Transformation & Provenance Suite</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveOverlay('none')}
+              className="rounded-xl p-1.5 text-dim hover:bg-white/5 hover:text-ink transition"
+              title="Close Lab"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* Field Asset Quick Picker */}
+            <div>
+              <span className="font-mono text-[10px] uppercase tracking-wider text-faint block mb-2">
+                Select Field Evidence Asset to Transform:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(media.data || []).slice(0, 4).map((item) => {
+                  const isSelected = activeLabMedia?.id === item.id
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setLabSelectedMediaId(item.id)}
+                      className={cn(
+                        'group relative overflow-hidden rounded-xl border p-1 text-left transition',
+                        isSelected
+                          ? 'border-mint bg-mint/10 ring-1 ring-mint/40 shadow-[0_0_12px_rgba(94,224,181,0.2)]'
+                          : 'border-line/60 bg-elev/40 hover:border-line hover:bg-elev2/60',
+                      )}
+                    >
+                      <img src={item.secureUrl} alt="" className="aspect-[4/3] w-full rounded-lg object-cover" />
+                      <p className="mt-1 truncate font-mono text-[10px] text-ink">{item.filename}</p>
+                      <span className="font-mono text-[8px] text-dim block">{item.perceptualHash?.slice(0, 10)}...</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Cloudinary Lab Interactive Component */}
+            {activeLabMedia && (
+              <CloudinaryLab
+                imageUrl={activeLabMedia.secureUrl}
+                alt={activeLabMedia.altText || activeLabMedia.filename}
+                title={activeLabMedia.filename}
+                latitude={activeLabMedia.latitude}
+                longitude={activeLabMedia.longitude}
+                capturedAt={activeLabMedia.capturedAt}
+                dHash={activeLabMedia.perceptualHash}
+                defaultMode="clarify"
+                showSplitSlider={true}
+              />
+            )}
           </div>
         </div>
       )}

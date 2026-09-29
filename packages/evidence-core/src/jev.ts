@@ -6,6 +6,14 @@ import { policyRoute, type PolicyInput } from './policy'
 interface JevResponse {
   project: string
   activity: string
+  contentCategory?:
+    | 'travel_landscape'
+    | 'events_gatherings'
+    | 'personal_meeting'
+    | 'work_documentation'
+    | 'field_operations'
+    | 'community_social'
+    | 'general_evidence'
   evidenceRole: string
   relation: string
   confidence: number
@@ -20,7 +28,7 @@ const VALID_ROLES = new Set([
 
 const VALID_RELATIONS = new Set([
   'BELONGS_TO', 'SHOWS_ACTIVITY', 'CAPTURED_AT',
-  'BEFORE_OF', 'AFTER_OF', 'SUPPORTS',
+  'BEFORE_OF', 'AFTER_OF', 'SUPPORTS', 'FILED_IN',
 ])
 
 function parseJevResponse(raw: unknown): JevResponse | null {
@@ -30,6 +38,10 @@ function parseJevResponse(raw: unknown): JevResponse | null {
   if (typeof obj.activity !== 'string') return null
   if (typeof obj.confidence !== 'number' || obj.confidence < 0 || obj.confidence > 1) return null
   if (typeof obj.reviewProbability !== 'number') return null
+  const contentCategory = typeof obj.contentCategory === 'string' &&
+    ['travel_landscape', 'events_gatherings', 'personal_meeting', 'work_documentation', 'field_operations', 'community_social', 'general_evidence'].includes(obj.contentCategory)
+    ? (obj.contentCategory as JevResponse['contentCategory'])
+    : undefined
   const evidenceRole = typeof obj.evidenceRole === 'string' && VALID_ROLES.has(obj.evidenceRole)
     ? obj.evidenceRole
     : 'activity_evidence'
@@ -39,9 +51,11 @@ function parseJevResponse(raw: unknown): JevResponse | null {
   const reasoning = Array.isArray(obj.reasoning)
     ? obj.reasoning.filter((r): r is string => typeof r === 'string').slice(0, 5)
     : []
+
   return {
     project: obj.project,
     activity: obj.activity,
+    contentCategory,
     evidenceRole,
     relation,
     confidence: Math.max(0, Math.min(1, obj.confidence)),
@@ -54,9 +68,11 @@ export async function routeEvidence(
   input: PolicyInput,
   apiKey?: string,
   model?: string,
+  groqKeys?: string[],
 ): Promise<EvidenceDecision> {
   const policy = policyRoute(input)
-  if (!apiKey) return policy
+  const hasGroq = Array.isArray(groqKeys) && groqKeys.length > 0
+  if (!apiKey && !hasGroq) return policy
 
   const modelSlug = model || 'typesafe/jev-router'
   const start = Date.now()
@@ -68,18 +84,38 @@ export async function routeEvidence(
     const activityIds = ACTIVITIES.map((a) => a.id)
     const activityEnum = [...activityIds, 'unknown']
 
+    const categoryEnum = [
+      'travel_landscape',
+      'events_gatherings',
+      'personal_meeting',
+      'work_documentation',
+      'field_operations',
+      'community_social',
+      'general_evidence',
+    ]
+
     const systemMessage = [
-      'You are an evidence routing classifier for a sustainability impact platform.',
-      'You receive metadata about a field-captured image and must decide:',
-      '1. Which project this image belongs to (pick ONLY from the given project IDs)',
-      '2. Which sustainability activity it shows',
-      '3. Its evidence role and graph relation',
-      '4. Your confidence (0-1) and whether a human should review it (0-1)',
+      'You are an intelligent evidence routing classifier for ImpactMesh multi-domain workspaces.',
+      'You receive metadata about an uploaded media file and must decide:',
+      '1. Which category does this file belong to:',
+      '   - "travel_landscape": scenic outdoors, Switzerland, Alps, mountains, lakes, beaches, valleys, travel, tourism, vacation, nature expeditions.',
+      '   - "events_gatherings": conferences, summits, hackathons, festivals, parties, workshops, ceremonies, sports, stage events.',
+      '   - "personal_meeting": personal portraits, webcam selfies, family, friends, Zoom/Teams calls, online video meetings.',
+      '   - "work_documentation": code, software IDE, terminal, presentations, spreadsheets, charts, diagrams, receipts, invoices, UI design.',
+      '   - "field_operations": physical on-site environmental work, tree planting, river restoration, solar panels, waste cleanups, drone surveys.',
+      '   - "community_social": volunteer drives, civic outreach, public welfare, food drives, NGO programs.',
+      '   - "general_evidence": unclassified or general intake.',
+      '2. Which project this image belongs to (pick ONLY from the given project IDs, or "unrelated" / "needs_review"). If the image is travel, personal, event, or work, choose "unrelated".',
+      '3. Which sustainability activity it shows (or "unknown")',
+      '4. Its evidence role and graph relation (e.g. "FILED_IN" for non-project categories)',
+      '5. Your confidence (0-1) and whether a human should review it (0-1)',
       '',
-      'RULES:',
-      '- Only choose from the IDs given. Never invent a project or activity ID.',
-      '- If nothing fits well, use "needs_review" or "unrelated" for project, "unknown" for activity.',
-      '- This is a field-evidence intake decision, not free chat.',
+      'CRITICAL RULES:',
+      '- If the file shows mountains, lakes, Switzerland, scenic nature, or travel photography, set contentCategory="travel_landscape" and project="unrelated". DO NOT call it work documentation even if the filename contains "Screenshot"!',
+      '- If the file shows faces, personal portraits, selfies, or online calls, set contentCategory="personal_meeting" and project="unrelated".',
+      '- If the file shows conferences, festivals, workshops, or stage events, set contentCategory="events_gatherings" and project="unrelated".',
+      '- Only set contentCategory="work_documentation" if it actually displays code, software, terminal, documents, or data tables.',
+      '- Only choose project IDs if the image ACTUALLY matches that project description.',
       '- Keep reasoning strings short (under 140 chars each) and limited to 1-3 items.',
       '',
       'Respond with valid JSON matching the exact schema provided.',
@@ -98,74 +134,148 @@ export async function routeEvidence(
       })),
     })
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 10_000)
+    let rawContent: string | undefined
+    let respondingModel: string | undefined
+    let usage: { prompt_tokens?: number; completion_tokens?: number } | undefined
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://impact-mesh.vercel.app',
-        'X-Title': 'ImpactMesh Evidence Router',
-      },
-      body: JSON.stringify({
-        model: modelSlug,
-        temperature: 0,
-        max_tokens: 500,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'evidence_decision',
-            strict: true,
-            schema: {
-              type: 'object',
-              properties: {
-                project: { type: 'string', enum: projectEnum },
-                activity: { type: 'string', enum: activityEnum },
-                evidenceRole: {
-                  type: 'string',
-                  enum: ['cover', 'before', 'after', 'activity_evidence',
-                    'location_evidence', 'partner_evidence', 'supporting', 'exclude', 'review'],
+    // 1. ATTEMPT HIGH-SPEED GROQ INFERENCE WITH MULTI-KEY AUTO-FAILOVER
+    if (hasGroq) {
+      for (let i = 0; i < groqKeys.length; i++) {
+        const groqKey = groqKeys[i]
+        try {
+          const controller = new AbortController()
+          const timeout = setTimeout(() => controller.abort(), 6_000)
+          const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${groqKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              temperature: 0.1,
+              max_tokens: 500,
+              response_format: { type: 'json_object' },
+              messages: [
+                {
+                  role: 'system',
+                  content: `${systemMessage}\nOutput MUST be valid JSON with keys: contentCategory, project, activity, evidenceRole, relation, confidence, reviewProbability, reasoning. Allowed contentCategory values: ${JSON.stringify(categoryEnum)}. Allowed project values: ${JSON.stringify(projectEnum)}. Allowed activity values: ${JSON.stringify(activityEnum)}.`,
                 },
-                relation: {
-                  type: 'string',
-                  enum: ['BELONGS_TO', 'SHOWS_ACTIVITY', 'CAPTURED_AT',
-                    'BEFORE_OF', 'AFTER_OF', 'SUPPORTS'],
+                { role: 'user', content: userMessage },
+              ],
+            }),
+            signal: controller.signal,
+          })
+          clearTimeout(timeout)
+
+          if (groqRes.ok) {
+            const data = (await groqRes.json()) as {
+              model?: string
+              choices?: Array<{ message?: { content?: string } }>
+              usage?: { prompt_tokens?: number; completion_tokens?: number }
+            }
+            if (data.choices?.[0]?.message?.content) {
+              rawContent = data.choices[0].message.content
+              respondingModel = data.model || 'groq/llama-3.3-70b-versatile'
+              usage = data.usage
+              break
+            }
+          }
+        } catch {
+          // Attempt next fallback key
+        }
+      }
+    }
+
+    // 2. FALLBACK TO OPENROUTER IF GROQ WAS UNAVAILABLE OR NOT CONFIGURED
+    if (!rawContent && apiKey) {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10_000)
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://impact-mesh.vercel.app',
+          'X-Title': 'ImpactMesh Evidence Router',
+        },
+        body: JSON.stringify({
+          model: modelSlug,
+          temperature: 0,
+          max_tokens: 500,
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'evidence_decision',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  project: { type: 'string', enum: projectEnum },
+                  activity: { type: 'string', enum: activityEnum },
+                  evidenceRole: {
+                    type: 'string',
+                    enum: [
+                      'cover',
+                      'before',
+                      'after',
+                      'activity_evidence',
+                      'location_evidence',
+                      'partner_evidence',
+                      'supporting',
+                      'exclude',
+                      'review',
+                    ],
+                  },
+                  relation: {
+                    type: 'string',
+                    enum: ['BELONGS_TO', 'SHOWS_ACTIVITY', 'CAPTURED_AT', 'BEFORE_OF', 'AFTER_OF', 'SUPPORTS'],
+                  },
+                  confidence: { type: 'number' },
+                  reviewProbability: { type: 'number' },
+                  reasoning: { type: 'array', items: { type: 'string' }, maxItems: 3 },
                 },
-                confidence: { type: 'number' },
-                reviewProbability: { type: 'number' },
-                reasoning: { type: 'array', items: { type: 'string' }, maxItems: 3 },
+                required: [
+                  'project',
+                  'activity',
+                  'evidenceRole',
+                  'relation',
+                  'confidence',
+                  'reviewProbability',
+                  'reasoning',
+                ],
+                additionalProperties: false,
               },
-              required: ['project', 'activity', 'evidenceRole', 'relation',
-                'confidence', 'reviewProbability', 'reasoning'],
-              additionalProperties: false,
             },
           },
-        },
-        messages: [
-          { role: 'system', content: systemMessage },
-          { role: 'user', content: userMessage },
-        ],
-      }),
-      signal: controller.signal,
-    })
+          messages: [
+            { role: 'system', content: systemMessage },
+            { role: 'user', content: userMessage },
+          ],
+        }),
+        signal: controller.signal,
+      })
 
-    clearTimeout(timeout)
+      clearTimeout(timeout)
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      throw new Error(`OpenRouter returned ${response.status}: ${errorText.slice(0, 200)}`)
+      if (response.ok) {
+        const body = (await response.json()) as {
+          model?: string
+          choices?: Array<{ message?: { content?: string } }>
+          usage?: { prompt_tokens?: number; completion_tokens?: number }
+        }
+        rawContent = body.choices?.[0]?.message?.content
+        respondingModel = body.model || modelSlug
+        usage = body.usage
+      }
     }
 
-    const body = await response.json() as {
-      model?: string
-      choices?: Array<{ message?: { content?: string } }>
-      usage?: { prompt_tokens?: number; completion_tokens?: number }
+    if (!rawContent) {
+      throw new Error('All AI providers (Groq & OpenRouter) failed or were unconfigured')
     }
+
     const latencyMs = Date.now() - start
-    const rawContent = body.choices?.[0]?.message?.content
-    if (!rawContent) throw new Error('No content in OpenRouter response')
 
     let parsed: unknown
     try {
@@ -207,23 +317,41 @@ export async function routeEvidence(
       reasons.push('Perceptual hash is close to an existing asset.')
     }
 
-    const respondingModel = body.model || modelSlug
+    const finalModel = respondingModel || modelSlug
+
+    const category = jev.contentCategory || policy.contentCategory
+    const categoryLabel =
+      category === 'travel_landscape'
+        ? 'Travel & Exploration'
+        : category === 'events_gatherings'
+          ? 'Events & Gatherings'
+          : category === 'personal_meeting'
+            ? 'Personal & Meetings'
+            : category === 'work_documentation'
+              ? 'Work & Documentation'
+              : category === 'field_operations'
+                ? 'Field Operations'
+                : category === 'community_social'
+                  ? 'Community & Social Impact'
+                  : 'General Evidence'
 
     return {
       source: 'jev',
-      model: respondingModel,
+      model: finalModel,
       projectChoice,
       confidence,
       requiresReview,
       evidenceRole: (jev.evidenceRole as EvidenceDecision['evidenceRole']) || policy.evidenceRole,
       relation: (jev.relation as EvidenceDecision['relation']) || policy.relation,
       activityCategory: jev.activity !== 'unknown' ? jev.activity : policy.activityCategory,
+      contentCategory: category,
+      categoryLabel,
       reasons,
       debug: {
-        respondingModel,
+        respondingModel: finalModel,
         latencyMs,
-        promptTokens: body.usage?.prompt_tokens,
-        completionTokens: body.usage?.completion_tokens,
+        promptTokens: usage?.prompt_tokens,
+        completionTokens: usage?.completion_tokens,
         reviewProbability,
         policyProjectChoice: policy.projectChoice,
         agreedWithPolicy: !disagrees,

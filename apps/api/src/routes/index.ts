@@ -50,6 +50,7 @@ function status() {
   return {
     mode: integrationMode,
     cloudinary: services.cloudinary,
+    cloudName: env.cloudName || 'dtixkwv7z',
     jev: services.jev,
     redis: services.redis,
     mongodb: services.mongodb,

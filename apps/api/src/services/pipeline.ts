@@ -100,6 +100,7 @@ export async function analyzeMedia(mediaId: string) {
       },
       env.openRouterKey || undefined,
       env.jevModel,
+      env.groqKeys,
     )
     if (geo.reason) decision.reasons = [...decision.reasons, geo.reason]
     await wait(450)

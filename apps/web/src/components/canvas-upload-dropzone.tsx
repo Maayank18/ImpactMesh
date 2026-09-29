@@ -129,7 +129,7 @@ export function CanvasUploadDropzone({
                   {item.stage === 'location' && (
                     <span className="flex items-center gap-1 text-amber">
                       <MapPin size={10} />
-                      <span>Matching Yamuna centroid</span>
+                      <span>{item.suggestedLocation ? `Resolving ${item.suggestedLocation}` : 'Resolving spatial geofence'}</span>
                     </span>
                   )}
                   {item.stage === 'review' && (

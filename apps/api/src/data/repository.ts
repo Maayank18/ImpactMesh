@@ -82,6 +82,21 @@ export class EvidenceRepository {
       this.db = createSeed()
       await this.persistNow()
     }
+
+    // Auto-sanitize legacy media that falsely inherited loc_nigambodh
+    for (const item of this.db.media) {
+      const text = `${item.filename} ${item.caption}`.toLowerCase()
+      if (/(whatsapp|enhanced-photo|photo|selfie|meet|teams|zoom|screenshot)/.test(text) && item.locationId === 'loc_nigambodh') {
+        item.locationId = null
+        item.latitude = null
+        item.longitude = null
+        item.locationSource = 'unknown'
+        item.locationConfidence = 0
+        if (item.projectId === 'proj_yamuna' && !/(sapling|river|tree|bank|soil|planting)/.test(text)) {
+          item.projectId = null
+        }
+      }
+    }
   }
 
   private async readAll(): Promise<Database> {
@@ -746,10 +761,28 @@ export class EvidenceRepository {
     if (result.checksum) media.checksum = result.checksum
     media.similarTo = result.similarTo
 
-    if (!media.projectId && result.decision.projectChoice.startsWith('proj_')) {
-      media.projectId = result.decision.projectChoice
+    const isIndependentCategory =
+      result.decision.contentCategory === 'travel_landscape' ||
+      result.decision.contentCategory === 'events_gatherings' ||
+      result.decision.contentCategory === 'personal_meeting' ||
+      result.decision.contentCategory === 'work_documentation' ||
+      result.decision.contentCategory === 'community_social'
+
+    if (isIndependentCategory) {
+      media.projectId = null
+      if (result.locationSource !== 'exif') {
+        media.locationId = null
+        media.latitude = null
+        media.longitude = null
+        media.locationSource = 'unknown'
+        media.locationConfidence = 0
+      }
+    } else {
+      if (!media.projectId && result.decision.projectChoice.startsWith('proj_')) {
+        media.projectId = result.decision.projectChoice
+      }
+      if (result.locationId) media.locationId = result.locationId
     }
-    if (result.locationId) media.locationId = result.locationId
     if (result.activityCategory && media.projectId) {
       const activity = this.db.activities.find(
         (item) => item.projectId === media.projectId && item.category === result.activityCategory,
@@ -869,6 +902,8 @@ export class EvidenceRepository {
         confidence: item.decision?.confidence ?? item.locationConfidence,
         caption: item.caption,
         isPublic: item.public,
+        contentCategory: item.decision?.contentCategory ?? null,
+        categoryLabel: item.decision?.categoryLabel ?? null,
       }))
     const mediaIds = new Set(media.map((m) => m.id))
     const locationIds = new Set([
@@ -1008,10 +1043,10 @@ export class EvidenceRepository {
     }
   }
 
-  createComparison(actorId: string, input: { projectId: string; title: string; beforeId: string; afterId: string; note?: string }) {
+  createComparison(actorId: string, input: { projectId?: string; title: string; beforeId: string; afterId: string; note?: string }) {
     const comparison: Comparison = {
       id: `cmp_${nanoid(6)}`,
-      projectId: input.projectId,
+      projectId: input.projectId || '',
       title: input.title,
       beforeId: input.beforeId,
       afterId: input.afterId,

@@ -20,7 +20,7 @@ export function UploadPage() {
   const me = useMe()
   const remember = useWorkspace((state) => state.rememberPreview)
   const toast = useWorkspace((state) => state.toast)
-  const [projectId, setProjectId] = useState('proj_yamuna')
+  const [projectId, setProjectId] = useState('')
   const [rows, setRows] = useState<Row[]>([])
   const [over, setOver] = useState(false)
   const editable = canEdit(me.data?.user.role)

@@ -15,6 +15,8 @@ export interface GraphMediaInput {
   caption: string
   publicOnly?: boolean
   isPublic?: boolean
+  contentCategory?: string | null
+  categoryLabel?: string | null
 }
 
 export interface GraphBuildInput {
@@ -58,6 +60,7 @@ export interface GraphBuildOptions {
 const SIZE: Record<GraphNode['type'], number> = {
   organization: 22,
   project: 16,
+  category: 15,
   evidence_set: 11,
   location: 10,
   activity: 9,
@@ -105,7 +108,7 @@ export function buildEvidenceGraph(input: GraphBuildInput, options: GraphBuildOp
 
   let media = input.media.filter((item) => {
     if (item.reviewStatus === 'rejected') return false
-    if (item.projectId && !projectIds.has(item.projectId) && options.projectId) return false
+    if (options.projectId && item.projectId !== options.projectId) return false
     if (options.publicOnly && !item.isPublic) return false
     if (!inRange(item.capturedAt, options.from, options.to)) return false
     if (mode === 'evidence' && evidenceIds.size > 0 && !evidenceIds.has(item.id)) return false
@@ -118,7 +121,7 @@ export function buildEvidenceGraph(input: GraphBuildInput, options: GraphBuildOp
   }
 
   const activeProjectIds = new Set(projects.map((project) => project.id))
-  media = media.filter((item) => !item.projectId || activeProjectIds.has(item.projectId) || !options.projectId)
+  media = media.filter((item) => !item.projectId || activeProjectIds.has(item.projectId))
 
   const nodes: GraphNode[] = []
   const links: GraphLink[] = []
@@ -237,8 +240,94 @@ export function buildEvidenceGraph(input: GraphBuildInput, options: GraphBuildOp
   }
 
   const visibleMedia = includeMedia || mode === 'evidence' ? media : []
+  const activeCategories = new Map<string, { id: string; label: string; color: string; count: number }>()
+
+  function inferCategory(item: GraphMediaInput): { id: string; label: string; color: string } {
+    if (item.contentCategory === 'travel_landscape') {
+      return { id: 'cat_travel', label: 'Travel & Exploration', color: '#06b6d4' }
+    }
+    if (item.contentCategory === 'events_gatherings') {
+      return { id: 'cat_events', label: 'Events & Gatherings', color: '#f59e0b' }
+    }
+    if (item.contentCategory === 'personal_meeting') {
+      return { id: 'cat_personal', label: 'Personal & Meetings', color: '#a855f7' }
+    }
+    if (item.contentCategory === 'work_documentation') {
+      return { id: 'cat_work', label: 'Work & Documentation', color: '#38bdf8' }
+    }
+    if (item.contentCategory === 'community_social') {
+      return { id: 'cat_community', label: 'Community & Social Impact', color: '#f43f5e' }
+    }
+    if (item.contentCategory === 'field_operations') {
+      return { id: 'cat_field', label: 'Field Operations', color: '#10b981' }
+    }
+    const text = `${item.label} ${item.caption || ''}`.toLowerCase()
+    if (/(switzerland|swiss|alps|mountain|lake|landscape|scenic|travel|vacation|tourism|tourist|hiking|valley|fjord|glacier|beach|resort|nature|outdoor|hill|destination|waterfall|forest|holiday|trip)/.test(text)) {
+      return { id: 'cat_travel', label: 'Travel & Exploration', color: '#06b6d4' }
+    }
+    if (/(event|conference|summit|hackathon|festival|party|gathering|workshop|stage|celebration|ceremony|concert|exhibition|keynote|webinar|sports)/.test(text)) {
+      return { id: 'cat_events', label: 'Events & Gatherings', color: '#f59e0b' }
+    }
+    if (/(person|people|face|selfie|portrait|headshot|meet|meeting|zoom|teams|call|webcam|avatar|family|friends|glasses)/.test(text)) {
+      return { id: 'cat_personal', label: 'Personal & Meetings', color: '#a855f7' }
+    }
+    if (/(code|ide|vscode|terminal|programming|git|github|slide|presentation|dashboard|chart|graph|table|invoice|receipt|document|diagram|wireframe|spreadsheet|excel|pdf)/.test(text)) {
+      return { id: 'cat_work', label: 'Work & Documentation', color: '#38bdf8' }
+    }
+    if (/(community|volunteer|social|charity|aid|relief|ngo|donation|civic|welfare)/.test(text)) {
+      return { id: 'cat_community', label: 'Community & Social Impact', color: '#f43f5e' }
+    }
+    if (item.activityId || /(tree|water|river|plant|solar|waste|soil|sapling|drone|field|restoration|plantation)/.test(text)) {
+      return { id: 'cat_field', label: 'Field Operations', color: '#10b981' }
+    }
+    return { id: 'cat_general', label: 'General Evidence', color: '#94a3b8' }
+  }
+
+  // Pre-collect active category parent clusters
+  for (const item of visibleMedia) {
+    const cat = inferCategory(item)
+    const isSpecialCategory = cat.id !== 'cat_field'
+    const isUnassigned = !item.projectId || !activeProjectIds.has(item.projectId)
+    if (isSpecialCategory || isUnassigned) {
+      const existing = activeCategories.get(cat.id)
+      if (existing) {
+        existing.count += 1
+      } else {
+        activeCategories.set(cat.id, { ...cat, count: 1 })
+      }
+    }
+  }
+
+  // Add dynamic Category parent nodes to the graph
+  for (const [catId, cat] of activeCategories.entries()) {
+    nodes.push({
+      id: catId,
+      type: 'category',
+      label: cat.label,
+      size: SIZE.category,
+      color: cat.color,
+      confidence: 0.96,
+      groupId: catId,
+      clusterCount: cat.count,
+      metadata: {
+        category: catId,
+        count: cat.count,
+        description: `Smart parent cluster for ${cat.label}`,
+      },
+    })
+    links.push(
+      link(catId, input.organization.id, 'BELONGS_TO', 0.95, [
+        `Dynamic parent cluster for ${cat.label}.`,
+      ]),
+    )
+  }
+
   for (const item of visibleMedia) {
     const location = input.locations.find((entry) => entry.id === item.locationId)
+    const cat = inferCategory(item)
+    const hasCategoryParent = activeCategories.has(cat.id)
+    const isSpecialCategory = cat.id !== 'cat_field'
+
     nodes.push({
       id: item.id,
       type: 'media',
@@ -246,7 +335,7 @@ export function buildEvidenceGraph(input: GraphBuildInput, options: GraphBuildOp
       size: SIZE.media,
       confidence: item.confidence,
       imageUrl: item.imageUrl,
-      groupId: item.projectId ?? undefined,
+      groupId: hasCategoryParent && isSpecialCategory ? cat.id : (item.projectId ?? cat.id),
       metadata: {
         caption: item.caption,
         reviewStatus: item.reviewStatus,
@@ -256,9 +345,22 @@ export function buildEvidenceGraph(input: GraphBuildInput, options: GraphBuildOp
         latitude: location?.latitude,
         longitude: location?.longitude,
         capturedAt: item.capturedAt ?? undefined,
+        contentCategory: cat.id,
+        categoryLabel: cat.label,
       },
     })
-    if (item.projectId && activeProjectIds.has(item.projectId)) {
+
+    // Connect to dynamic category parent node
+    if (hasCategoryParent && (isSpecialCategory || !item.projectId || !activeProjectIds.has(item.projectId))) {
+      links.push(
+        link(item.id, cat.id, 'FILED_IN', item.confidence || 0.9, [
+          `AI clustered this media under "${cat.label}".`,
+        ]),
+      )
+    }
+
+    // Only link to project if it actually belongs to a valid project and is not personal/work
+    if (item.projectId && activeProjectIds.has(item.projectId) && !isSpecialCategory) {
       links.push(
         link(item.id, item.projectId, 'BELONGS_TO', item.confidence || 0.8, [
           'Filed under this project during intake.',

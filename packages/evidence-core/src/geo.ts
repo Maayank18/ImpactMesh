@@ -56,23 +56,15 @@ export function resolveLocation(input: {
       reason: 'EXIF GPS is present and was not snapped to a known site.',
     }
   }
-  if (input.projectLocation) {
-    return {
-      locationId: input.projectLocation.id,
-      latitude: input.projectLocation.latitude,
-      longitude: input.projectLocation.longitude,
-      source: 'project',
-      confidence: 0.62,
-      reason: 'No GPS on the file. The project location is used, with lower confidence.',
-    }
-  }
+  // If EXIF GPS is absent, DO NOT fabricate coordinates or snap to a physical site.
+  // Physical location stays null and unassigned unless explicitly verified or tagged.
   return {
     locationId: null,
     latitude: null,
     longitude: null,
     source: 'unknown',
-    confidence: 0.2,
-    reason: 'No GPS and no project location.',
+    confidence: 0,
+    reason: 'No EXIF GPS metadata detected on file. Physical location unassigned.',
   }
 }
 

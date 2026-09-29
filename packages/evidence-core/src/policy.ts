@@ -50,9 +50,21 @@ export function policyRoute(input: PolicyInput): EvidenceDecision {
   if (!input.locationKnown) confidence = clamp(confidence - 0.12)
   if (input.duplicateRisk >= 0.92) confidence = clamp(confidence - 0.08)
 
+  const isDedicatedCategory =
+    classified.contentCategory === 'travel_landscape' ||
+    classified.contentCategory === 'events_gatherings' ||
+    classified.contentCategory === 'personal_meeting' ||
+    classified.contentCategory === 'work_documentation' ||
+    classified.contentCategory === 'community_social'
+
   let projectChoice = 'needs_review'
-  if ((best?.score ?? 0) >= 2) projectChoice = best!.project.id
-  else if ((best?.score ?? 0) === 0 && !classified.activity) projectChoice = 'unrelated'
+  if (isDedicatedCategory) {
+    projectChoice = 'unrelated'
+  } else if ((best?.score ?? 0) >= 2) {
+    projectChoice = best!.project.id
+  } else if ((best?.score ?? 0) === 0 && !classified.activity) {
+    projectChoice = 'unrelated'
+  }
 
   const lower = text.toLowerCase()
   let evidenceRole: EvidenceRole = 'activity_evidence'
@@ -63,13 +75,14 @@ export function policyRoute(input: PolicyInput): EvidenceDecision {
   let relation: RelationType = classified.activity ? 'SHOWS_ACTIVITY' : 'BELONGS_TO'
   if (evidenceRole === 'before') relation = 'BEFORE_OF'
   if (evidenceRole === 'after') relation = 'AFTER_OF'
+  if (isDedicatedCategory) {
+    relation = 'FILED_IN'
+  }
 
   const reasons = [
-    classified.activity
-      ? `Vocabulary points to ${classified.activity.label}.`
-      : 'No activity vocabulary was strong enough to classify the file.',
+    `Classified under ${classified.categoryLabel}.`,
     projectChoice === 'needs_review' || projectChoice === 'unrelated'
-      ? 'No project matched strongly enough to file this automatically.'
+      ? `Filed under ${classified.categoryLabel} parent cluster.`
       : `Closest project match is “${best?.project.name}”.`,
   ]
   if (!input.locationKnown) reasons.push('Location is missing, so confidence stays below the auto-file line.')
@@ -92,6 +105,8 @@ export function policyRoute(input: PolicyInput): EvidenceDecision {
     evidenceRole,
     relation,
     activityCategory: classified.activity?.id ?? null,
+    contentCategory: classified.contentCategory,
+    categoryLabel: classified.categoryLabel,
     reasons,
   }
 }
