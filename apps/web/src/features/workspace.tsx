@@ -1687,6 +1687,77 @@ export function WorkspacePage() {
                   </div>
                 </div>
               )}
+
+              {/* ACTIVITY NODE SPECIFIC INSPECTOR */}
+              {selectedNode.type === 'activity' && (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-elev2/60 p-4 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-sky flex items-center gap-1.5">
+                        <Tag size={13} className="text-sky" />
+                        <span>Activity Vocabulary</span>
+                      </span>
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-full bg-sky/15 text-sky border border-sky/30">
+                        {selectedActivityMedia.length} Assets
+                      </span>
+                    </div>
+                    <p className="text-xs text-dim leading-relaxed">
+                      Field captures documenting <strong className="text-ink">{selectedNode.label}</strong> verified in this project.
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-faint block pb-2">
+                      Evidence Showing This Activity ({selectedActivityMedia.length})
+                    </span>
+                    {selectedActivityMedia.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/10 p-5 text-center">
+                        <p className="text-xs text-faint font-mono">No evidence linked yet</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {selectedActivityMedia.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              workspace.setSelectedNode(item.id)
+                              graphRef.current?.flyTo(item.id)
+                            }}
+                            className="group overflow-hidden rounded-xl border border-line bg-elev/40 p-1.5 text-left hover:border-sky/50 transition"
+                          >
+                            <img
+                              src={item.secureUrl}
+                              alt=""
+                              className="aspect-[4/3] w-full rounded-lg object-cover group-hover:scale-105 transition"
+                            />
+                            <p className="mt-1.5 truncate font-mono text-[10px] text-ink font-medium">{item.filename}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* OTHER / GENERIC NODES (Organization, Partner, Report, Evidence Set) */}
+              {!['media', 'project', 'location', 'category', 'activity'].includes(selectedNode.type) && (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-elev2/60 p-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-mint flex items-center gap-1.5">
+                        <ShieldCheck size={13} className="text-mint" />
+                        <span>Mesh Node Detail</span>
+                      </span>
+                      <span className="font-mono text-xs text-dim">
+                        Type: {titleCase(selectedNode.type)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-dim leading-relaxed">
+                      Part of the verified organization evidence graph.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Close Inspector */}
